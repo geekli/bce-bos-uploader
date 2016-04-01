@@ -23,15 +23,15 @@
   "dependencies": {
     "jquery": "~2.2.1"
   },
-  "version": "1.1.0",
-  "_release": "1.1.0",
+  "version": "1.1.2",
+  "_release": "1.1.2",
   "_resolution": {
     "type": "version",
-    "tag": "1.1.0",
-    "commit": "b6805a05e7e85aba73555de1100539db64e8492e"
+    "tag": "1.1.2",
+    "commit": "176cfc842d780dc222b4068975e4ddcc5ab4104e"
   },
   "_source": "git://github.com/leeight/bce-bos-uploader.git",
-  "_target": "^1.1.0",
+  "_target": "^1.1.2",
   "_originalSource": "bce-bos-uploader",
   "_direct": true
 }
