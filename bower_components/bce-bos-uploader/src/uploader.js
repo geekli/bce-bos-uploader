@@ -55,7 +55,14 @@ var kDefaultOptions = {
     chunk_size: '4mb',
 
     // 分块上传时,是否允许断点续传，默认（true）
-    bos_multipart_auto_continue: true
+    bos_multipart_auto_continue: true,
+
+    // 分开上传的时候，localStorage里面key的生成方式，默认是 `default`
+    // 如果需要自定义，可以通过 XXX
+    bos_multipart_local_key_generator: 'default',
+
+    // 是否允许选择目录
+    dir_selection: false
 };
 
 var kPostInit = 'PostInit';
@@ -71,6 +78,7 @@ var kBeforeUpload = 'BeforeUpload';
 var kUploadProgress = 'UploadProgress';
 var kFileUploaded = 'FileUploaded';
 var kUploadPartProgress = 'UploadPartProgress';
+var kChunkUploaded = 'ChunkUploaded';
 var kUploadResume = 'UploadResume'; // 断点续传
 var kUploadResumeError = 'UploadResumeError'; // 尝试断点续传失败
 
@@ -84,41 +92,6 @@ var kUploadComplete = 'UploadComplete';
  * @param {Object|string} options 配置参数
  */
 function Uploader(options) {
-    // 已经支持的参数
-    // options.runtimes
-    // options.browse_button
-    // options.uptoken_url
-    // options.uptoken
-    // options.max_file_size
-    // options.max_retries
-    // options.chunk_size
-    // options.auto_start
-    // options.bos_endpoint
-    // options.bos_bucket
-    // options.bos_multipart_min_size
-    // options.bos_multipart_auto_continue
-    // options.multi_selection
-    // options.init.PostInit
-    // options.init.FileFiltered
-    // options.init.FilesAdded
-    // options.init.BeforeUpload
-    // options.init.UploadProgress
-    // options.init.FileUploaded
-    // options.init.Error
-    // options.init.UploadComplete
-
-    // 暂时不支持的参数
-    // options.filters
-    // options.get_new_uptoken
-    // options.unique_names
-    // options.save_key
-    // options.domain
-    // options.container
-    // options.flash_swf_url
-    // options.dragdrop
-    // options.drop_element
-    // options.init.Key
-
     if (u.isString(options)) {
         // 支持简便的写法，可以从 DOM 里面分析相关的配置.
         options = u.extend({
@@ -245,7 +218,9 @@ Uploader.prototype._invoke = function (methodName, args) {
     }
 
     try {
-        return method.apply(null, args == null ? [] : args);
+        var up = null;
+        args = args == null ? [up] : [up].concat(args);
+        return method.apply(null, args);
     }
     catch (ex) {
         debug('%s(%j) -> %s', methodName, args, ex);
@@ -264,6 +239,12 @@ Uploader.prototype._init = function () {
     }
     btn.on('change', u.bind(this._onFilesAdded, this));
 
+    if (this.options.dir_selection) {
+        btn.attr('directory', true);
+        btn.attr('mozdirectory', true);
+        btn.attr('webkitdirectory', true);
+    }
+
     this.client.on('progress', u.bind(this._onUploadProgress, this));
     // XXX 必须绑定 error 的处理函数，否则会 throw new Error
     this.client.on('error', u.bind(this._onError, this));
@@ -279,7 +260,7 @@ Uploader.prototype._filterFiles = function (candidates) {
 
     var files = u.filter(candidates, function (file) {
         if (maxFileSize > 0 && file.size > maxFileSize) {
-            self._invoke(kFileFiltered, [null, file]);
+            self._invoke(kFileFiltered, [file]);
             return false;
         }
 
@@ -289,13 +270,13 @@ Uploader.prototype._filterFiles = function (candidates) {
         return true;
     });
 
-    return this._invoke(kFilesFilter, [null, files]) || files;
+    return this._invoke(kFilesFilter, [files]) || files;
 };
 
 Uploader.prototype._onFilesAdded = function (e) {
     var files = this._filterFiles(e.target.files);
     if (u.isArray(files) && files.length) {
-        this._invoke(kFilesAdded, [null, files]);
+        this._invoke(kFilesAdded, [files]);
         this._files.push.apply(this._files, files);
     }
 
@@ -306,7 +287,7 @@ Uploader.prototype._onFilesAdded = function (e) {
 
 Uploader.prototype._onError = function (e) {
     debug(e);
-    // this._invoke(kError, [null, e, this._currentFile]);
+    // this._invoke(kError, [e, this._currentFile]);
 };
 
 Uploader.prototype._onUploadProgress = function (e) {
@@ -321,12 +302,12 @@ Uploader.prototype._onUploadProgress = function (e) {
 
         var partNumber = headers['x-bce-meta-part-number'];
         if (partNumber != null) {
-            this._invoke(kUploadPartProgress, [null, this._currentFile, progress, e]);
+            this._invoke(kUploadPartProgress, [this._currentFile, progress, e]);
             return;
         }
     }
 
-    this._invoke(kUploadProgress, [null, this._currentFile, progress, e]);
+    this._invoke(kUploadProgress, [this._currentFile, progress, e]);
 };
 
 Uploader.prototype.start = function () {
@@ -385,13 +366,13 @@ Uploader.prototype._uploadNextViaMultipart = function (file) {
     var multipartParallel = this.options.bos_multipart_parallel;
     var chunkSize = this.options.chunk_size;
 
-    var returnValue = this._invoke(kBeforeUpload, [null, file]);
+    var returnValue = this._invoke(kBeforeUpload, [file]);
     if (returnValue === false) {
         return this._uploadNext(this._getNext());
     }
 
     // 可能会重命名
-    returnValue = this._invoke(kKey, [null, file]);
+    returnValue = this._invoke(kKey, [file]);
     object = returnValue || object;
     this._initiateMultipartUpload(file, chunkSize, bucket, object, options)
         .then(function (response) {
@@ -411,7 +392,7 @@ Uploader.prototype._uploadNextViaMultipart = function (file) {
                 total: tasks.length
             };
             if (loaded) {
-                self._invoke(kUploadProgress, [null, file, loaded / tasks.length, null]);
+                self._invoke(kUploadProgress, [file, loaded / tasks.length, null]);
             }
 
             async.mapLimit(tasks, multipartParallel, self._uploadPart(state),
@@ -435,28 +416,33 @@ Uploader.prototype._uploadNextViaMultipart = function (file) {
                 });
             });
             // 全部上传结束后删除localStorage
-            utils.generateLocalKey({
+            self._generateLocalKey({
                 blob: file,
                 chunkSize: chunkSize,
                 bucket: bucket,
                 object: object
-            }).then(function (localSaveKey) {
-                utils.removeUploadId(localSaveKey);
+            }).then(function (key) {
+                utils.removeUploadId(key);
             });
             return self.client.completeMultipartUpload(bucket, object, uploadId, partList);
         })
         .then(function (response) {
             response.body.bucket = bucket;
             response.body.object = object;
-            self._invoke(kFileUploaded, [null, file, response]);
+            self._invoke(kFileUploaded, [file, response]);
         })
         .catch(function (error) {
-            self._invoke(kError, [null, error, file]);
+            self._invoke(kError, [error, file]);
         })
         .fin(function () {
             // 上传结束（成功/失败），开始下一个
             return self._uploadNext(self._getNext());
         });
+};
+
+Uploader.prototype._generateLocalKey = function (options) {
+    var generator = this.options.bos_multipart_local_key_generator;
+    return utils.generateLocalKey(options, generator);
 };
 
 Uploader.prototype._initiateMultipartUpload = function (file, chunkSize, bucket, object, options) {
@@ -483,7 +469,7 @@ Uploader.prototype._initiateMultipartUpload = function (file, chunkSize, bucket,
         object: object
     };
     var promise = this.options.bos_multipart_auto_continue
-        ? utils.generateLocalKey(keyOptions)
+        ? this._generateLocalKey(keyOptions)
         : sdk.Q.resolve(null);
 
     return promise.then(function (key) {
@@ -503,7 +489,7 @@ Uploader.prototype._initiateMultipartUpload = function (file, chunkSize, bucket,
             if (uploadId && localSaveKey) {
                 var parts = response.body.parts;
                 // listParts 的返回结果
-                self._invoke(kUploadResume, [null, file, parts, null]);
+                self._invoke(kUploadResume, [file, parts, null]);
                 response.body.uploadId = uploadId;
             }
             return response;
@@ -511,7 +497,7 @@ Uploader.prototype._initiateMultipartUpload = function (file, chunkSize, bucket,
         .catch(function (error) {
             if (uploadId && localSaveKey) {
                 // 如果获取已上传分片失败，则重新上传。
-                self._invoke(kUploadResumeError, [null, file, error, null]);
+                self._invoke(kUploadResumeError, [file, error, null]);
                 utils.removeUploadId(localSaveKey);
                 return initNewMultipartUpload();
             }
@@ -545,7 +531,15 @@ Uploader.prototype._uploadPart = function (state) {
             .then(function (response) {
                 ++state.loaded;
                 var progress = state.loaded / state.total;
-                self._invoke(kUploadProgress, [null, self._currentFile, progress, null]);
+                self._invoke(kUploadProgress, [self._currentFile, progress, null]);
+
+                var result = {
+                    offset: item.start,
+                    total: blob.size,
+                    response: response
+                };
+                self._invoke(kChunkUploaded, [self._currentFile, result]);
+
                 return response;
             })
             .catch(function (error) {
@@ -610,13 +604,13 @@ Uploader.prototype._uploadNext = function (file, opt_maxRetries) {
     var maxRetries = opt_maxRetries == null
         ? this.options.max_retries
         : opt_maxRetries;
-    var returnValue = this._invoke(kBeforeUpload, [null, file]);
+    var returnValue = this._invoke(kBeforeUpload, [file]);
     if (returnValue === false) {
         return this._uploadNext(this._getNext());
     }
 
     // 可能会重命名
-    returnValue = this._invoke(kKey, [null, file]);
+    returnValue = this._invoke(kKey, [file]);
     object = returnValue || object;
 
     return this.client.putObjectFromBlob(bucket, object, file, options)
@@ -624,16 +618,16 @@ Uploader.prototype._uploadNext = function (file, opt_maxRetries) {
             if (file.size <= 0) {
                 // 如果文件大小为0，不会触发 xhr 的 progress 事件，因此
                 // 在上传成功之后，手工触发一次
-                self._invoke(kUploadProgress, [null, file, 1]);
+                self._invoke(kUploadProgress, [file, 1]);
             }
             response.body.bucket = bucket;
             response.body.object = object;
-            self._invoke(kFileUploaded, [null, file, response]);
+            self._invoke(kFileUploaded, [file, response]);
             // 上传成功，开始下一个
             return self._uploadNext(self._getNext());
         })
         .catch(function (error) {
-            self._invoke(kError, [null, error, file]);
+            self._invoke(kError, [error, file]);
             if (error.status_code && error.code && error.request_id) {
                 // 应该是正常的错误（比如签名异常），这种情况就不要重试了
                 return self._uploadNext(self._getNext());
@@ -644,13 +638,6 @@ Uploader.prototype._uploadNext = function (file, opt_maxRetries) {
             }
             // 重试结束了，不管了，继续下一个文件的上传
             return self._uploadNext(self._getNext());
-        });
-};
-
-Uploader.prototype._listParts = function (bucket, object, uploadId) {
-    return this.client.listParts(bucket, object, uploadId)
-        .then(function (response) {
-            return response.body.parts;
         });
 };
 

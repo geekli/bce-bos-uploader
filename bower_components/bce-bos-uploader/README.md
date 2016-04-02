@@ -67,12 +67,14 @@ var uploader = new baidubce.bos.Uploader({
 |uptoken|N|无|sts token的内容|
 |auth_stripped_headers|N|['User-Agent', 'Connection']|如果计算签名的时候，需要剔除一些headers，可以配置这个参数|
 |multi_selection|N|false|是否可以选择多个文件|
+|dir_selection|N|false|是否允许选择目录(有些浏览器开启了这个选型之后，只能选择目录，无法选择文件)|
 |max_retries|N|0|如果上传文件失败之后，支持的重试次数。默认不重试|
 |auto_start|N|false|选择文件之后，是否自动上传|
 |max_file_size|N|100M|可以选择的最大文件，超过这个值之后，会被忽略掉|
 |bos_multipart_min_size|N|10M|超过这个值之后，采用分片上传的策略。如果想让所有的文件都采用分片上传，把这个值设置为0即可|
 |chunk_size|N|4M|分片上传的时候，每个分片的大小（如果没有切换到分片上传的策略，这个值没意义）|
 |bos_multipart_auto_continue|N|true|是否开启断点续传，如果设置成false，则UploadResume和UploadResumeError事件不会生效|
+|bos_multipart_local_key_generator|N|defaults|计算localStorage里面key的策略，可选值有`defaults`和`md5`|
 
 下列属性暂时不支持，看用户反馈再进行升级
 
@@ -121,6 +123,9 @@ var uploader = new baidubce.bos.Uploader({
     },
     UploadPartProgress: function (_, file, progress, event) {
       // 分片上传的时候，单个分片的上传进度
+    },
+    ChunkUploaded: function (_, file, result) {
+      // 分片上传的时候，单个分片上传结束
     },
     Error: function (_, error, file) {
       // 如果上传的过程中出错了，调用这个函数

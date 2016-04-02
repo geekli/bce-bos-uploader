@@ -16,6 +16,7 @@
 
 var u = require('underscore');
 var Q = require('bce-sdk-js').Q;
+var SparkMD5 = require('spark-md5');
 
 /**
  * 把文件进行切片，返回切片之后的数组
@@ -88,20 +89,108 @@ exports.isPromise = function (value) {
     return (value && typeof value.then === 'function');
 };
 
-exports.generateLocalKey = function (option) {
-    return Q.resolve([option.blob.name, option.blob.size, option.chunkSize, option.bucket, option.object].join('&'));
+/**
+ * 生成本地 localStorage 中的key，来存储 uploadId
+ * localStorage[key] = uploadId
+ *
+ * @param {Object} option 一些可以用来计算key的参数.
+ * @param {string} generator 内置的只有 default 和 md5
+ * @return {Promise}
+ */
+exports.generateLocalKey = function (option, generator) {
+    if (generator === 'default') {
+        return Q.resolve([
+            option.blob.name, option.blob.size,
+            option.chunkSize, option.bucket,
+            option.object
+        ].join('&'));
+    }
+    else if (generator === 'md5') {
+        return exports.md5sum(option.blob).then(function (md5) {
+            return [
+                md5,
+                option.blob.name,
+                option.blob.size,
+                option.chunkSize,
+                option.bucket,
+                option.object
+            ].join('&');
+        });
+    }
+    return Q.resolve(null);
 };
 
+/**
+ * 基于 SparkMD5 来快速的计算 blob 的md5
+ * 貌似直接使用 bce-sdk-js/src/crypto 里面的 md5blob，对于 300M 的文件，Chrome 直接
+ * 挂掉了
+ *
+ * @param {Blob} file 需要计算md5的文件内容.
+ * @return {Promise}
+ */
+exports.md5sum = function (file) {
+    var blobSlice = File.prototype.slice || File.prototype.mozSlice || File.prototype.webkitSlice;
+    var chunkSize = 2097152;
+    var chunks = Math.ceil(file.size / chunkSize);
+    var currentChunk = 0;
+    var spark = new SparkMD5.ArrayBuffer();
+    var fileReader = new FileReader();
+
+    var deferred = Q.defer();
+
+    fileReader.onload = function (e) {
+        spark.append(e.target.result);
+        currentChunk++;
+
+        if (currentChunk < chunks) {
+            loadNext();
+        }
+        else {
+            deferred.resolve(spark.end());
+        }
+    };
+    fileReader.onerror = function (error) {
+        deferred.reject(error);
+    };
+
+    function loadNext() {
+        var start = currentChunk * chunkSize;
+        var end = ((start + chunkSize) >= file.size) ? file.size : start + chunkSize;
+        fileReader.readAsArrayBuffer(blobSlice.call(file, start, end));
+    }
+    loadNext();
+
+    return deferred.promise;
+};
+
+/**
+ * 根据key获取localStorage中的uploadId
+ *
+ * @param {string} key 需要查询的key
+ * @return {string}
+ */
 exports.getUploadId = function (key) {
     return localStorage.getItem(key);
 };
 
+
+/**
+ * 根据key设置localStorage中的uploadId
+ *
+ * @param {string} key 需要查询的key
+ * @param {string} uploadId 需要设置的uploadId
+ */
 exports.setUploadId = function (key, uploadId) {
-    return localStorage.setItem(key, uploadId);
+    localStorage.setItem(key, uploadId);
 };
 
+/**
+ * 根据key删除localStorage中的uploadId
+ *
+ * @param {string} key 需要查询的key
+ */
 exports.removeUploadId = function (key) {
-    return localStorage.removeItem(key);
+    localStorage.removeItem(key);
 };
 
 /**
@@ -118,6 +207,14 @@ function getPartEtag(partNumber, existParts) {
     return matchParts.length ? matchParts[0].eTag : null;
 }
 
+/**
+ * 因为 listParts 会返回 partNumber 和 etag 的对应关系
+ * 所以 listParts 返回的结果，给 tasks 中合适的元素设置 etag 属性，上传
+ * 的时候就可以跳过这些 part
+ *
+ * @param {Array.<Object>} tasks 本地切分好的任务.
+ * @param {Array.<Object>} parts 服务端返回的已经上传的parts.
+ */
 exports.filterTasks = function (tasks, parts) {
     u.each(tasks, function (task) {
         var partNumber = task.partNumber;
@@ -127,5 +224,3 @@ exports.filterTasks = function (tasks, parts) {
         }
     });
 };
-
-/* vim: set ts=4 sw=4 sts=4 tw=120: */
