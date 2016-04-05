@@ -26,15 +26,15 @@
     "js-polyfills": "^0.1.19",
     "moxie": "^1.4.1"
   },
-  "version": "1.1.4-rc.1",
-  "_release": "1.1.4-rc.1",
+  "version": "1.1.4-rc.2",
+  "_release": "1.1.4-rc.2",
   "_resolution": {
     "type": "version",
-    "tag": "1.1.4-rc.1",
-    "commit": "3c7f9aaebe44c695d1725a04a929721198a66bf9"
+    "tag": "1.1.4-rc.2",
+    "commit": "197aa84c6b281c1f3208499cea1afa47f8a270bf"
   },
   "_source": "git://github.com/leeight/bce-bos-uploader.git",
-  "_target": "1.1.4-rc.1",
+  "_target": "1.1.4-rc.2",
   "_originalSource": "bce-bos-uploader",
   "_direct": true
 }

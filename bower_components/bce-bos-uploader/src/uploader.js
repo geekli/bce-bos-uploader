@@ -652,7 +652,7 @@ Uploader.prototype._uploadPart = function (state) {
             'x-bce-meta-part-number': item.partNumber
         };
         return self.client.uploadPartFromBlob(item.bucket, item.object, item.uploadId,
-            item.partNumber, item.partSize, blob.getSource(), options)
+            item.partNumber, item.partSize, blob, options)
             .then(function (response) {
                 ++state.loaded;
                 var progress = state.loaded / state.total;
