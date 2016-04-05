@@ -22,17 +22,19 @@
     "tests"
   ],
   "dependencies": {
-    "jquery": "~2.2.1"
+    "jquery": "~1.12.2",
+    "js-polyfills": "^0.1.19",
+    "moxie": "^1.4.1"
   },
-  "version": "1.1.3",
-  "_release": "1.1.3",
+  "version": "1.1.4-rc.1",
+  "_release": "1.1.4-rc.1",
   "_resolution": {
     "type": "version",
-    "tag": "1.1.3",
-    "commit": "b7342a73db1b53feba3cce3c517e4e99f80c6d66"
+    "tag": "1.1.4-rc.1",
+    "commit": "3c7f9aaebe44c695d1725a04a929721198a66bf9"
   },
   "_source": "git://github.com/leeight/bce-bos-uploader.git",
-  "_target": "^1.1.3",
+  "_target": "1.1.4-rc.1",
   "_originalSource": "bce-bos-uploader",
   "_direct": true
 }

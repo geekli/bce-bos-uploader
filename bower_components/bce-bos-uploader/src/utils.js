@@ -15,7 +15,7 @@
  */
 
 var u = require('underscore');
-var Q = require('bce-sdk-js').Q;
+var sdk = require('bce-sdk-js');
 var SparkMD5 = require('spark-md5');
 
 /**
@@ -90,6 +90,54 @@ exports.isPromise = function (value) {
 };
 
 /**
+ * 判断一下浏览器是否支持 xhr2 特性，如果不支持，就 fallback 到 PostObject
+ * 来上传文件
+ *
+ * @return {boolean}
+ */
+exports.isXhr2Supported = function () {
+    // https://github.com/Modernizr/Modernizr/blob/f839e2579da2c6331eaad922ae5cd691aac7ab62/feature-detects/network/xhr2.js
+    return 'XMLHttpRequest' in window && 'withCredentials' in new XMLHttpRequest();
+};
+
+
+/**
+ * 使用 PostObject 接口上传文件的时候，需要有默认的签名内容
+ *
+ * @param {string} bucket The bucket name.
+ * @return {Object}
+ */
+exports.getDefaultPolicy = function (bucket) {
+    if (bucket == null) {
+        return null;
+    }
+
+    var now = new Date().getTime();
+
+    // 默认是 24小时 之后到期
+    var expiration = new Date(now + 24 * 60 * 60 * 1000);
+    var utcDateTime = expiration.toISOString().replace(/\.\d+Z$/, 'Z');
+
+    return {
+        expiration: utcDateTime,
+        conditions: [
+            {bucket: bucket}
+        ]
+    };
+};
+
+/**
+ * 生成uuid
+ *
+ * @return {string}
+ */
+exports.uuid = function () {
+    var random = (Math.random() * Math.pow(2, 32)).toString(36);
+    var timestamp = new Date().getTime();
+    return 'u-' + timestamp + '-' + random;
+};
+
+/**
  * 生成本地 localStorage 中的key，来存储 uploadId
  * localStorage[key] = uploadId
  *
@@ -99,7 +147,7 @@ exports.isPromise = function (value) {
  */
 exports.generateLocalKey = function (option, generator) {
     if (generator === 'default') {
-        return Q.resolve([
+        return sdk.Q.resolve([
             option.blob.name, option.blob.size,
             option.chunkSize, option.bucket,
             option.object
@@ -117,7 +165,7 @@ exports.generateLocalKey = function (option, generator) {
             ].join('&');
         });
     }
-    return Q.resolve(null);
+    return sdk.Q.resolve(null);
 };
 
 /**
@@ -136,7 +184,7 @@ exports.md5sum = function (file) {
     var spark = new SparkMD5.ArrayBuffer();
     var fileReader = new FileReader();
 
-    var deferred = Q.defer();
+    var deferred = sdk.Q.defer();
 
     fileReader.onload = function (e) {
         spark.append(e.target.result);
@@ -223,4 +271,53 @@ exports.filterTasks = function (tasks, parts) {
             task.etag = etag;
         }
     });
+};
+
+/**
+ * 把用户输入的配置转化成 html5 和 flash 可以接收的内容.
+ *
+ * @param {string|Array} accept 支持数组和字符串的配置
+ * @return {string}
+ */
+exports.expandAccept = function (accept) {
+    var exts = [];
+
+    if (u.isArray(accept)) {
+        // Flash要求的格式
+        u.each(accept, function (item) {
+            if (item.extensions) {
+                exts.push.apply(exts, item.extensions.split(','));
+            }
+        });
+    }
+    else if (u.isString(accept)) {
+        exts = accept.split(',');
+    }
+
+    // 为了保证兼容性，把 mimeTypes 和 exts 都返回回去
+    var mimeTypes = u.uniq(u.map(exts, function (ext) {
+        if (ext.indexOf('/') !== -1) {
+            return ext;
+        }
+        return sdk.MimeType.guess(ext);
+    }));
+    exts = u.filter(exts, function (ext) {
+        return ext.indexOf('/') === -1;
+    });
+
+    return mimeTypes.concat(exts).join(',');
+};
+
+exports.expandAcceptToArray = function (accept) {
+    if (!accept || u.isArray(accept)) {
+        return accept;
+    }
+
+    if (u.isString(accept)) {
+        return [
+            {title: 'All files', extensions: accept}
+        ];
+    }
+
+    return [];
 };

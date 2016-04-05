@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>bce-bos-uploader simple demo</title>
     <link rel="stylesheet" type="text/css" href="bower_components/bootstrap/dist/css/bootstrap.min.css" />
+    <!--[if lt IE 9]><script src="bower_components/js-polyfills/es5.js"></script><![endif]-->
+    <!--[if lt IE 10]><script src="bower_components/moxie/bin/js/moxie.js"></script><![endif]-->
     <script src="bower_components/jquery/dist/jquery.min.js"></script>
     <script src="bower_components/bce-bos-uploader/bce-bos-uploader.bundle.min.js"></script>
     <script src="bower_components/humanize/humanize.js"></script>
@@ -151,16 +153,11 @@
       auto_start: false,
       max_retries: 2,
       max_file_size: '500mb',
+      accept: 'zip,rar,pdf,avi',
+      flash_swf_url: 'bower_components/moxie/bin/flash/Moxie.swf',
       init: {
         FilesFilter: function (_, files) {
-          var returnValue = [];
-          for (var i = 0; i < files.length; i ++) {
-            var file = files[i];
-            if (/\.(zip|rar|pdf|avi)$/i.test(file.name)) {
-              returnValue.push(file);
-            }
-          }
-          return returnValue;
+          // 添加更多的过滤规则，比如文件大小之类的
         },
         FilesAdded: function (_, files) {
           for (var i = 0; i < files.length; i++) {

@@ -62,7 +62,25 @@ var kDefaultOptions = {
     bos_multipart_local_key_generator: 'default',
 
     // 是否允许选择目录
-    dir_selection: false
+    dir_selection: false,
+
+    // 低版本浏览器上传文件的时候，需要设置 policy，默认情况下
+    // policy的内容只需要包含 expiration 和 conditions 即可
+    // policy: {
+    //   expiration: 'xx',
+    //   conditions: [
+    //     {bucket: 'the-bucket-name'}
+    //   ]
+    // }
+    bos_policy: null,
+
+    // 低版本浏览器上传文件的时候，需要设置 policy_signature
+    // 如果没有设置 bos_policy_signature 的话，会通过 uptoken_url 来请求
+    // 默认只会请求一次，如果失效了，需要手动来重置 policy_signature
+    bos_policy_signature: null,
+
+    // JSONP 默认的超时时间(5000ms)
+    uptoken_jsonp_timeout: 5000
 };
 
 var kPostInit = 'PostInit';
@@ -100,7 +118,10 @@ function Uploader(options) {
         }, $(options).data());
     }
 
-    this.options = u.extend({}, kDefaultOptions, options);
+    var runtimeOptions = {
+        bos_policy: utils.getDefaultPolicy(options.bos_bucket)
+    };
+    this.options = u.extend({}, kDefaultOptions, runtimeOptions, options);
     this.options.max_file_size = utils.parseSize(this.options.max_file_size);
     this.options.bos_multipart_min_size
         = utils.parseSize(this.options.bos_multipart_min_size);
@@ -136,7 +157,7 @@ function Uploader(options) {
     this._files = [];
 
     /**
-     * 当前正在上传的文件.
+     * FIXME(leeight) 当前正在上传的文件.
      * @type {File}
      */
     this._currentFile = null;
@@ -153,6 +174,12 @@ function Uploader(options) {
      */
     this._working = false;
 
+    /**
+     * 是否支持xhr2
+     * @type {boolean}
+     */
+    this._xhr2Supported = utils.isXhr2Supported();
+
     this._init();
 }
 
@@ -163,6 +190,7 @@ Uploader.prototype._resetChunkSize = function (chunkSize) {
 
 Uploader.prototype._getCustomizedSignature = function (uptokenUrl) {
     var options = this.options;
+    var timeout = options.uptoken_jsonp_timeout;
 
     return function (_, httpMethod, path, params, headers) {
         if (/\bed=([\w\.]+)\b/.test(location.search)) {
@@ -178,6 +206,7 @@ Uploader.prototype._getCustomizedSignature = function (uptokenUrl) {
             url: uptokenUrl,
             jsonp: 'callback',
             dataType: 'jsonp',
+            timeout: timeout,
             data: {
                 httpMethod: httpMethod,
                 path: path,
@@ -185,12 +214,14 @@ Uploader.prototype._getCustomizedSignature = function (uptokenUrl) {
                 params: JSON.stringify(params || {}),
                 headers: JSON.stringify(headers || {})
             },
+            error: function () {
+                deferred.reject(new Error('Get authorization timeout (' + timeout + 'ms).'));
+            },
             success: function (payload) {
                 if (payload.statusCode === 200 && payload.signature) {
                     deferred.resolve(payload.signature, payload.xbceDate);
                 }
                 else {
-                    // TODO(leeight) timeout
                     deferred.reject(new Error('createSignature failed, statusCode = ' + payload.statusCode));
                 }
             }
@@ -231,25 +262,119 @@ Uploader.prototype._invoke = function (methodName, args) {
  * 初始化控件.
  */
 Uploader.prototype._init = function () {
-    var btn = $(this.options.browse_button);
-    if (btn.attr('multiple') == null) {
-        // 如果用户没有显示的设置过 multiple，使用 multi_selection 的设置
-        // 否则保留 <input multiple /> 的内容
-        btn.attr('multiple', !!this.options.multi_selection);
+    var options = this.options;
+    var accept = options.accept;
+
+    if (!this._xhr2Supported) {
+        if (typeof mOxie !== 'undefined' && typeof mOxie.FileInput === 'function') {
+            // https://github.com/moxiecode/moxie/wiki/FileInput
+            // mOxie.FileInput 只支持
+            // [+]: browse_button, accept multiple, directory, file
+            // [x]: container, required_caps
+            var fileInput = new mOxie.FileInput({
+                runtime_order: 'flash,html4',
+                browse_button: $(options.browse_button).get(0),
+                swf_url: options.flash_swf_url,
+                accept: utils.expandAcceptToArray(accept),
+                multiple: options.multi_selection,
+                directory: options.dir_selection,
+                file: 'file'      // PostObject接口要求固定是 'file'
+            });
+
+            fileInput.onchange = u.bind(this._onFilesAdded, this);
+            fileInput.init();
+        }
+
+        var self = this;
+        this._initPolicySignature().then(function (payload) {
+            if (payload) {
+                self.options.bos_policy_base64 = payload.policy;
+                self.options.bos_policy_signature = payload.signature;
+                self.options.bos_ak = payload.accessKey;
+            }
+            self._invoke(kPostInit);
+        })
+        .catch(function (error) {
+            debug(error);
+            self._invoke(kError, [error]);
+        });
     }
-    btn.on('change', u.bind(this._onFilesAdded, this));
+    else {
+        var btn = $(options.browse_button);
+        if (btn.attr('multiple') == null) {
+            // 如果用户没有显示的设置过 multiple，使用 multi_selection 的设置
+            // 否则保留 <input multiple /> 的内容
+            btn.attr('multiple', !!options.multi_selection);
+        }
+        btn.on('change', u.bind(this._onFilesAdded, this));
 
-    if (this.options.dir_selection) {
-        btn.attr('directory', true);
-        btn.attr('mozdirectory', true);
-        btn.attr('webkitdirectory', true);
+        if (accept != null) {
+            btn.attr('accept', utils.expandAccept(accept));
+        }
+
+        if (options.dir_selection) {
+            btn.attr('directory', true);
+            btn.attr('mozdirectory', true);
+            btn.attr('webkitdirectory', true);
+        }
+
+        this.client.on('progress', u.bind(this._onUploadProgress, this));
+        // XXX 必须绑定 error 的处理函数，否则会 throw new Error
+        this.client.on('error', u.bind(this._onError, this));
+        this._invoke(kPostInit);
+    }
+};
+
+Uploader.prototype._initPolicySignature = function () {
+    var options = this.options;
+    var bos_policy = options.bos_policy;
+    var bos_policy_signature = options.bos_policy_signature;
+    var uptoken_url = options.uptoken_url;
+    var timeout = options.uptoken_jsonp_timeout;
+
+    if (!bos_policy) {
+        // 如果没有设置 bos_policy，莫非因为 bucket 是 public-read-write?
+        // 因为默认情况下 bos_policy 是有内容设置的，所以如果出现不存在的情况
+        // 肯定是使用者显式的设置成 null 了
+        return sdk.Q.resolve();
     }
 
-    this.client.on('progress', u.bind(this._onUploadProgress, this));
-    // XXX 必须绑定 error 的处理函数，否则会 throw new Error
-    this.client.on('error', u.bind(this._onError, this));
+    if (!bos_policy_signature) {
+        // 如果设置了 bos_policy 但是没有设置 bos_policy_signature
+        // 那么就动态的从后台请求一次
+        if (!uptoken_url) {
+            return sdk.Q.reject(new Error('In order to get policy signature, `uptoken_url` must be setted.'));
+        }
 
-    this._invoke(kPostInit);
+        var deferred = sdk.Q.defer();
+        $.ajax({
+            url: uptoken_url,
+            jsonp: 'callback',
+            dataType: 'jsonp',
+            timeout: timeout,
+            data: {
+                policy: JSON.stringify(bos_policy)
+            },
+            success: function (payload) {
+                // payload.policy (base64)
+                // payload.signature
+                // payload.accessKey
+                deferred.resolve(payload);
+            },
+            error: function () {
+                deferred.reject(new Error('Get policy signature timeout (' + timeout + 'ms).'));
+            }
+        });
+        return deferred.promise;
+    }
+
+    // 不需要用户自己设置，主动计算一下就好了.
+    if (options.bos_policy_base64 == null) {
+        options.bos_policy_base64 = new Buffer(JSON.stringify(
+            bos_policy)).toString('base64');
+    }
+
+    return sdk.Q.resolve();
 };
 
 Uploader.prototype._filterFiles = function (candidates) {
@@ -274,7 +399,15 @@ Uploader.prototype._filterFiles = function (candidates) {
 };
 
 Uploader.prototype._onFilesAdded = function (e) {
-    var files = this._filterFiles(e.target.files);
+    var files = e.target.files;
+    if (!files) {
+        // IE7, IE8 低版本浏览器的处理
+        var name = e.target.value.split(/[\/\\]/).pop();
+        files = [
+            {name: name, size: 0}
+        ];
+    }
+    files = this._filterFiles(files);
     if (u.isArray(files) && files.length) {
         this._invoke(kFilesAdded, [files]);
         this._files.push.apply(this._files, files);
@@ -335,7 +468,7 @@ Uploader.prototype._getNext = function () {
     return this._files.shift();
 };
 
-Uploader.prototype._guessContentType = function (file) {
+Uploader.prototype._guessContentType = function (file, opt_ignoreCharset) {
     var contentType = file.type;
     if (!contentType) {
         var object = file.name;
@@ -345,7 +478,7 @@ Uploader.prototype._guessContentType = function (file) {
 
     // Firefox在POST的时候，Content-Type 一定会有Charset的，因此
     // 这里不管3721，都加上.
-    if (!/charset=/.test(contentType)) {
+    if (!opt_ignoreCharset && !/charset=/.test(contentType)) {
         contentType += '; charset=UTF-8';
     }
 
@@ -353,9 +486,6 @@ Uploader.prototype._guessContentType = function (file) {
 };
 
 Uploader.prototype._uploadNextViaMultipart = function (file) {
-    var bucket = this.options.bos_bucket;
-    var object = file.name;
-
     var contentType = this._guessContentType(file);
     var options = {
         'Content-Type': contentType
@@ -366,14 +496,9 @@ Uploader.prototype._uploadNextViaMultipart = function (file) {
     var multipartParallel = this.options.bos_multipart_parallel;
     var chunkSize = this.options.chunk_size;
 
-    var returnValue = this._invoke(kBeforeUpload, [file]);
-    if (returnValue === false) {
-        return this._uploadNext(this._getNext());
-    }
+    var bucket = this.options.bos_bucket;
+    var object = this._invoke(kKey, [file]) || file.name;
 
-    // 可能会重命名
-    returnValue = this._invoke(kKey, [file]);
-    object = returnValue || object;
     this._initiateMultipartUpload(file, chunkSize, bucket, object, options)
         .then(function (response) {
             uploadId = response.body.uploadId;
@@ -527,7 +652,7 @@ Uploader.prototype._uploadPart = function (state) {
             'x-bce-meta-part-number': item.partNumber
         };
         return self.client.uploadPartFromBlob(item.bucket, item.object, item.uploadId,
-            item.partNumber, item.partSize, blob, options)
+            item.partNumber, item.partSize, blob.getSource(), options)
             .then(function (response) {
                 ++state.loaded;
                 var progress = state.loaded / state.total;
@@ -574,6 +699,89 @@ Uploader.prototype._uploadPart = function (state) {
     };
 };
 
+Uploader.prototype._uploadNextViaPostObject = function (file) {
+    var self = this;
+    var options = this.options;
+
+    var bucket = options.bos_bucket;
+    var url = options.bos_endpoint.replace(/^(https?:\/\/)/, '$1' + bucket + '.');
+    var object = this._invoke(kKey, [file]) || file.name;
+
+    var fields = {
+        'Content-Type': this._guessContentType(file, true),
+        'key': object,
+        'policy': options.bos_policy_base64,
+        'signature': options.bos_policy_signature,
+        'accessKey': options.bos_ak,
+        'success-action-status': '201'
+    };
+
+    this._sendPostRequest(url, fields, file)
+        .then(function (response) {
+            response.body.bucket = bucket;
+            response.body.object = object;
+            self._invoke(kFileUploaded, [file, response]);
+        })
+        .catch(function (error) {
+            debug(error);
+            self._invoke(kError, [error, file]);
+        })
+        .fin(function () {
+            return self._uploadNext(self._getNext());
+        });
+};
+
+Uploader.prototype._sendPostRequest = function (url, fields, file) {
+    var self = this;
+    var deferred = sdk.Q.defer();
+
+    var formData = new mOxie.FormData();
+    u.each(fields, function (value, name) {
+        if (value == null) {
+            return;
+        }
+        formData.append(name, value);
+    });
+    formData.append('file', file);
+
+    var xhr = new mOxie.XMLHttpRequest();
+    xhr.responseType = 'text';
+    xhr.onreadystatechange = function (e) {
+        if (xhr.readyState === 4) {
+            if (xhr.status === 200) {
+                deferred.resolve({
+                    http_headers: xhr.getAllResponseHeaders(),
+                    body: {}
+                });
+            }
+            else {
+                deferred.reject(xhr.responseText);
+                // deferred.reject(xhr.getResponse('json'));
+            }
+        }
+    };
+    xhr.upload.onprogress = function (e) {
+        var progress = e.loaded / e.total;
+        self._invoke(kUploadProgress, [file, progress, null]);
+    };
+    xhr.bind('error', function (e) {
+        deferred.reject(e);
+    });
+    xhr.bind('RuntimeError', function (e) {
+        deferred.reject(e);
+    });
+    xhr.open('POST', url, true);
+    xhr.send(formData, {
+        required_caps: {
+            return_response_headers: true,
+            do_cors: true
+        }
+    });
+
+    return deferred.promise;
+};
+
+
 Uploader.prototype._uploadNext = function (file, opt_maxRetries) {
     if (file == null || this._abort) {
         // 自动结束了 或者 人为结束了
@@ -582,19 +790,28 @@ Uploader.prototype._uploadNext = function (file, opt_maxRetries) {
         return;
     }
 
+    var returnValue = this._invoke(kBeforeUpload, [file]);
+    if (returnValue === false) {
+        return this._uploadNext(this._getNext());
+    }
+
     // 设置一下当前正在上传的文件，progress 事件需要用到
     this._currentFile = file;
 
     // 判断一下应该采用何种方式来上传
+    if (!this._xhr2Supported) {
+        return this._uploadNextViaPostObject(file);
+    }
+
     var multipartMinSize = this.options.bos_multipart_min_size;
     if (file.size > multipartMinSize) {
         return this._uploadNextViaMultipart(file);
     }
 
-    // Upload By PUT OBJECT
-    var bucket = this.options.bos_bucket;
-    var object = file.name;
+    return this._uploadNextViaPutObject(file);
+};
 
+Uploader.prototype._uploadNextViaPutObject = function (file, opt_maxRetries) {
     var contentType = this._guessContentType(file);
     var options = {
         'Content-Type': contentType
@@ -604,14 +821,9 @@ Uploader.prototype._uploadNext = function (file, opt_maxRetries) {
     var maxRetries = opt_maxRetries == null
         ? this.options.max_retries
         : opt_maxRetries;
-    var returnValue = this._invoke(kBeforeUpload, [file]);
-    if (returnValue === false) {
-        return this._uploadNext(this._getNext());
-    }
 
-    // 可能会重命名
-    returnValue = this._invoke(kKey, [file]);
-    object = returnValue || object;
+    var bucket = this.options.bos_bucket;
+    var object = this._invoke(kKey, [file]) || file.name;
 
     return this.client.putObjectFromBlob(bucket, object, file, options)
         .then(function (response) {
@@ -634,7 +846,7 @@ Uploader.prototype._uploadNext = function (file, opt_maxRetries) {
             }
             else if (maxRetries > 0) {
                 // 还有几乎重试
-                return self._uploadNext(file, maxRetries - 1);
+                return self._uploadNextViaPutObject(file, maxRetries - 1);
             }
             // 重试结束了，不管了，继续下一个文件的上传
             return self._uploadNext(self._getNext());
@@ -642,5 +854,3 @@ Uploader.prototype._uploadNext = function (file, opt_maxRetries) {
 };
 
 module.exports = Uploader;
-
-/* vim: set ts=4 sw=4 sts=4 tw=120: */

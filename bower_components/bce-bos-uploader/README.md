@@ -75,19 +75,64 @@ var uploader = new baidubce.bos.Uploader({
 |chunk_size|N|4M|分片上传的时候，每个分片的大小（如果没有切换到分片上传的策略，这个值没意义）|
 |bos_multipart_auto_continue|N|true|是否开启断点续传，如果设置成false，则UploadResume和UploadResumeError事件不会生效|
 |bos_multipart_local_key_generator|N|defaults|计算localStorage里面key的策略，可选值有`defaults`和`md5`|
+|accept|-|-|可以支持选择的文件类型|
+|bos_policy|-|默认值见下文|PostObject上传的时候，Policy内容|
+|bos_policy_signature|-|-|bos_policy的签名|
+|flash_swf_url|-|-|mOxie Flash文件的地址|
 
-下列属性暂时不支持，看用户反馈再进行升级
+#### 关于 bos_policy
 
-|*名称*|*是否必填*|*默认值*|*说明*|
-|-----|---------|-------|-----|
-|filters|N|无|文件的过滤条件|
-|get_new_uptoken|N|无|是否每次需要获取签名|
-|save_key|-|-|-|
-|domain|-|-|-|
-|container|-|-|-|
-|flash_swf_url|-|-|Flash文件的地址|
-|dragdrop|-|-|-|
-|drop_element|-|-|-|
+BOS为了支持低版本的IE浏览器，开发了 PostObject 接口，简单来说，就是支持通过 Form 表单的形式来直接把文件上传到 BOS。为了保证安全性，一般我们的 bucket 权限都是 `public-read`，因此在上传的表单里面添加必须的字段 `policy` 和 `signature`，对应到我们的配置项里面，就是 `bos_policy` 和 `bos_policy_signature`。
+
+其中 `bos_policy` 的默认值是
+
+```
+{
+  "expiration": "当前时间 + 24小时",
+  "conditions": [
+    {"bucket": "配置项里面的 bos_bucket 的名字"}
+  ]
+}
+```
+
+`conditions` 还支持的参数有`key` 和 `content-length-range`，例如：
+
+```
+{
+  "expiration": "当前时间 + 24小时",
+  "conditions": [
+    {"bucket": "配置项里面的 bos_bucket 的名字"},
+    {"key": "abc*"},
+    ["content-length-range", 0, 100]
+  ]
+}
+```
+
+`bos_policy_signature`是通过 `sk` 在后端对 `bos_policy` 进行签名得到的结果，简单来说，算法是这样子的
+
+```js
+var crypto = require('crypto');
+
+var sk = 'xxx';
+var policyBase64 = new Buffer(JSON.stringify(policy)).toString('base64');
+var sha256Hmac = crypto.createHmac('sha256', sk);
+sha256Hmac.update(policyBase64);
+var signature = sha256Hmac.digest('hex');
+```
+
+flash_swf_url 是 [mOxie](https://github.com/moxiecode/moxie) 提供的在低版本IE下面，通过 Flash 来模拟 XMLHttpRequest 和 FormData 接口的文件。
+
+如果把 bucket 的权限设置成了 public-read-write，那么其实任何人都可以往 bucket 里面上传文件了，此时就不需要有 bos_policy 了，需要显示的设置成 `null`.
+
+如果只设置了 bos_policy, 那么在需要 bos_policy_signature 的时候，会通过 uptoken_url 发起 JSONP 请求向后端来获取，需要返回的数据格式是：
+
+```
+jsonp({
+  policy: 'xx',
+  signature: 'yy',
+  accessKey: 'zz'
+});
+```
 
 ### 支持的事件
 
