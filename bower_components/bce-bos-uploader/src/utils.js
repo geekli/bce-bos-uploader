@@ -100,6 +100,29 @@ exports.isXhr2Supported = function () {
     return 'XMLHttpRequest' in window && 'withCredentials' in new XMLHttpRequest();
 };
 
+/**
+ * 规范化用户的输入
+ *
+ * @param {string} endpoint The endpoint will be normalized
+ * @return {string}
+ */
+exports.normalizeEndpoint = function (endpoint) {
+    return endpoint.replace(/(\/+)$/, '');
+};
+
+exports.getDefaultACL = function (bucket) {
+    return {
+        accessControlList: [
+            {
+                service: 'bce:bos',
+                region: '*',
+                effect: 'Allow',
+                resource: [bucket + '/*'],
+                permission: ['READ', 'WRITE']
+            }
+        ]
+    };
+};
 
 /**
  * 使用 PostObject 接口上传文件的时候，需要有默认的签名内容

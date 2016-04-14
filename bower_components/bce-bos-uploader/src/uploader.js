@@ -64,6 +64,9 @@ var kDefaultOptions = {
     // 是否允许选择目录
     dir_selection: false,
 
+    // 是否需要每次都去服务器计算签名
+    get_new_uptoken: true,
+
     // 低版本浏览器上传文件的时候，需要设置 policy，默认情况下
     // policy的内容只需要包含 expiration 和 conditions 即可
     // policy: {
@@ -140,13 +143,16 @@ function Uploader(options) {
      * @type {sdk.BosClient}
      */
     this.client = new sdk.BosClient({
-        endpoint: this.options.bos_endpoint,
+        endpoint: utils.normalizeEndpoint(this.options.bos_endpoint),
         credentials: credentials,
         sessionToken: this.options.uptoken
     });
 
-    if (this.options.uptoken_url) {
-        this.client.createSignature = this._getCustomizedSignature(this.options.uptoken_url);
+    if (!credentials && this.options.uptoken_url) {
+        if (this.options.get_new_uptoken === true) {
+            // 服务端动态签名的方式.
+            this.client.createSignature = this._getCustomizedSignature(this.options.uptoken_url);
+        }
     }
 
     /**
@@ -265,6 +271,7 @@ Uploader.prototype._init = function () {
     var options = this.options;
     var accept = options.accept;
 
+    var self = this;
     if (!this._xhr2Supported) {
         if (typeof mOxie !== 'undefined' && typeof mOxie.FileInput === 'function') {
             // https://github.com/moxiecode/moxie/wiki/FileInput
@@ -285,7 +292,6 @@ Uploader.prototype._init = function () {
             fileInput.init();
         }
 
-        var self = this;
         this._initPolicySignature().then(function (payload) {
             if (payload) {
                 self.options.bos_policy_base64 = payload.policy;
@@ -299,30 +305,87 @@ Uploader.prototype._init = function () {
             self._invoke(kError, [error]);
         });
     }
+    else if (options.uptoken_url && options.get_new_uptoken === false) {
+        // 切换到了 STS 的模式
+        this._initStsToken()
+            .then(function (payload) {
+                if (payload) {
+                    // 重新初始化一个 sdk.BosClient
+                    self.client = new sdk.BosClient({
+                        endpoint: utils.normalizeEndpoint(options.bos_endpoint),
+                        credentials: {
+                            ak: payload.AccessKeyId,
+                            sk: payload.SecretAccessKey
+                        },
+                        sessionToken: payload.SessionToken
+                    });
+                }
+                self._initEvents();
+                self._invoke(kPostInit);
+            })
+            .catch(function (error) {
+                debug(error);
+                self._invoke(kError, [error]);
+            });
+    }
     else {
-        var btn = $(options.browse_button);
-        if (btn.attr('multiple') == null) {
-            // 如果用户没有显示的设置过 multiple，使用 multi_selection 的设置
-            // 否则保留 <input multiple /> 的内容
-            btn.attr('multiple', !!options.multi_selection);
-        }
-        btn.on('change', u.bind(this._onFilesAdded, this));
-
-        if (accept != null) {
-            btn.attr('accept', utils.expandAccept(accept));
-        }
-
-        if (options.dir_selection) {
-            btn.attr('directory', true);
-            btn.attr('mozdirectory', true);
-            btn.attr('webkitdirectory', true);
-        }
-
-        this.client.on('progress', u.bind(this._onUploadProgress, this));
-        // XXX 必须绑定 error 的处理函数，否则会 throw new Error
-        this.client.on('error', u.bind(this._onError, this));
+        this._initEvents();
         this._invoke(kPostInit);
     }
+};
+
+Uploader.prototype._initEvents = function () {
+    var options = this.options;
+    var btn = $(options.browse_button);
+    if (btn.attr('multiple') == null) {
+        // 如果用户没有显示的设置过 multiple，使用 multi_selection 的设置
+        // 否则保留 <input multiple /> 的内容
+        btn.attr('multiple', !!options.multi_selection);
+    }
+    btn.on('change', u.bind(this._onFilesAdded, this));
+
+    var accept = options.accept;
+    if (accept != null) {
+        btn.attr('accept', utils.expandAccept(accept));
+    }
+
+    if (options.dir_selection) {
+        btn.attr('directory', true);
+        btn.attr('mozdirectory', true);
+        btn.attr('webkitdirectory', true);
+    }
+
+    this.client.on('progress', u.bind(this._onUploadProgress, this));
+    // XXX 必须绑定 error 的处理函数，否则会 throw new Error
+    this.client.on('error', u.bind(this._onError, this));
+};
+
+Uploader.prototype._initStsToken = function () {
+    var uptoken_url = this.options.uptoken_url;
+    var bucket = this.options.bos_bucket;
+    var timeout = this.options.uptoken_jsonp_timeout;
+
+    var deferred = sdk.Q.defer();
+    $.ajax({
+        url: uptoken_url,
+        jsonp: 'callback',
+        dataType: 'jsonp',
+        timeout: timeout,
+        data: {
+            sts: JSON.stringify(utils.getDefaultACL(bucket))
+        },
+        success: function (payload) {
+            // payload.AccessKeyId
+            // payload.SecretAccessKey
+            // payload.SessionToken
+            // payload.Expiration
+            deferred.resolve(payload);
+        },
+        error: function () {
+            deferred.reject(new Error('Get policy signature timeout (' + timeout + 'ms).'));
+        }
+    });
+    return deferred.promise;
 };
 
 Uploader.prototype._initPolicySignature = function () {
@@ -735,6 +798,13 @@ Uploader.prototype._sendPostRequest = function (url, fields, file) {
     var self = this;
     var deferred = sdk.Q.defer();
 
+    if (u.isUndefined(mOxie)
+        || !u.isFunction(mOxie.FormData)
+        || !u.isFunction(mOxie.XMLHttpRequest)) {
+        deferred.reject(new Error('mOxie is undefined.'));
+        return deferred.promise;
+    }
+
     var formData = new mOxie.FormData();
     u.each(fields, function (value, name) {
         if (value == null) {
@@ -750,20 +820,21 @@ Uploader.prototype._sendPostRequest = function (url, fields, file) {
         if (xhr.readyState === 4) {
             if (xhr.status === 200) {
                 deferred.resolve({
-                    http_headers: xhr.getAllResponseHeaders(),
+                    http_headers: xhr.getAllResponseHeaders() || {},
                     body: {}
                 });
             }
             else {
-                deferred.reject(xhr.responseText);
-                // deferred.reject(xhr.getResponse('json'));
+                deferred.reject(new Error('Invalid response statusCode ' + xhr.status));
             }
         }
     };
-    xhr.upload.onprogress = function (e) {
-        var progress = e.loaded / e.total;
-        self._invoke(kUploadProgress, [file, progress, null]);
-    };
+    if (xhr.upload) {
+        xhr.upload.onprogress = function (e) {
+            var progress = e.loaded / e.total;
+            self._invoke(kUploadProgress, [file, progress, null]);
+        };
+    }
     xhr.bind('error', function (e) {
         deferred.reject(e);
     });

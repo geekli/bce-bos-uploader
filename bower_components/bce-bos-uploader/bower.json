@@ -25,5 +25,10 @@
     "jquery": "~1.12.2",
     "js-polyfills": "^0.1.19",
     "moxie": "^1.4.1"
+  },
+  "devDependencies": {
+    "humanize": "^0.0.9",
+    "bootstrap": "^3.3.6",
+    "json3": "^3.3.2"
   }
 }
