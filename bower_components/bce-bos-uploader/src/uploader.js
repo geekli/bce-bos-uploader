@@ -241,9 +241,10 @@ Uploader.prototype._getCustomizedSignature = function (uptokenUrl) {
  *
  * @param {string} methodName 方法名称
  * @param {Array.<*>} args 调用时候的参数.
+ * @param {boolean=} throwErrors 如果发生异常的时候，是否需要抛出来
  * @return {*} 事件的返回值.
  */
-Uploader.prototype._invoke = function (methodName, args) {
+Uploader.prototype._invoke = function (methodName, args, throwErrors) {
     var init = this.options.init || this.options.Init;
     if (!init) {
         return;
@@ -261,6 +262,9 @@ Uploader.prototype._invoke = function (methodName, args) {
     }
     catch (ex) {
         debug('%s(%j) -> %s', methodName, args, ex);
+        if (throwErrors === true) {
+            return sdk.Q.reject(ex);
+        }
     }
 };
 
@@ -560,9 +564,20 @@ Uploader.prototype._uploadNextViaMultipart = function (file) {
     var chunkSize = this.options.chunk_size;
 
     var bucket = this.options.bos_bucket;
-    var object = this._invoke(kKey, [file]) || file.name;
+    var object = file.name;
+    var throwErrors = true;
 
-    this._initiateMultipartUpload(file, chunkSize, bucket, object, options)
+    return sdk.Q.resolve(this._invoke(kKey, [file], throwErrors))
+        .then(function (result) {
+            if (u.isString(result)) {
+                object = result;
+            }
+            else if (u.isObject(result)) {
+                bucket = result.bucket || bucket;
+                object = result.key || object;
+            }
+            return self._initiateMultipartUpload(file, chunkSize, bucket, object, options);
+        })
         .then(function (response) {
             uploadId = response.body.uploadId;
             var parts = response.body.parts || [];
@@ -767,19 +782,31 @@ Uploader.prototype._uploadNextViaPostObject = function (file) {
     var options = this.options;
 
     var bucket = options.bos_bucket;
-    var url = options.bos_endpoint.replace(/^(https?:\/\/)/, '$1' + bucket + '.');
-    var object = this._invoke(kKey, [file]) || file.name;
+    var object = file.name;
+    var throwErrors = true;
 
-    var fields = {
-        'Content-Type': this._guessContentType(file, true),
-        'key': object,
-        'policy': options.bos_policy_base64,
-        'signature': options.bos_policy_signature,
-        'accessKey': options.bos_ak,
-        'success-action-status': '201'
-    };
+    return sdk.Q.resolve(this._invoke(kKey, [file], throwErrors))
+        .then(function (result) {
+            if (u.isString(result)) {
+                object = result;
+            }
+            else if (u.isObject(result)) {
+                bucket = result.bucket || bucket;
+                object = result.key || object;
+            }
 
-    this._sendPostRequest(url, fields, file)
+            var url = options.bos_endpoint.replace(/^(https?:\/\/)/, '$1' + bucket + '.');
+
+            var fields = {
+                'Content-Type': self._guessContentType(file, true),
+                'key': object,
+                'policy': options.bos_policy_base64,
+                'signature': options.bos_policy_signature,
+                'accessKey': options.bos_ak,
+                'success-action-status': '201'
+            };
+            return self._sendPostRequest(url, fields, file);
+        })
         .then(function (response) {
             response.body.bucket = bucket;
             response.body.object = object;
@@ -894,9 +921,20 @@ Uploader.prototype._uploadNextViaPutObject = function (file, opt_maxRetries) {
         : opt_maxRetries;
 
     var bucket = this.options.bos_bucket;
-    var object = this._invoke(kKey, [file]) || file.name;
+    var object = file.name;
+    var throwErrors = true;
 
-    return this.client.putObjectFromBlob(bucket, object, file, options)
+    return sdk.Q.resolve(this._invoke(kKey, [file], throwErrors))
+        .then(function (result) {
+            if (u.isString(result)) {
+                object = result;
+            }
+            else if (u.isObject(result)) {
+                bucket = result.bucket || bucket;
+                object = result.key || object;
+            }
+            return self.client.putObjectFromBlob(bucket, object, file, options);
+        })
         .then(function (response) {
             if (file.size <= 0) {
                 // 如果文件大小为0，不会触发 xhr 的 progress 事件，因此

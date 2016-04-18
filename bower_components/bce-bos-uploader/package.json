@@ -1,12 +1,12 @@
 {
   "name": "bce-bos-uploader",
-  "version": "1.1.5-rc.1",
+  "version": "1.1.5-rc.2",
   "description": "Baidu Object Storage Uploader",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "fecs": "fecs src",
-    "pack": "node_modules/.bin/browserify src/uploader.js -d -s baidubce.bos.Uploader -t es3ify -p bundle-collapser/plugin -o bce-bos-uploader.bundle.js",
+    "fecs": "fecs src index.js",
+    "pack": "node_modules/.bin/browserify index.js -d -s baidubce -t es3ify -p bundle-collapser/plugin -o bce-bos-uploader.bundle.js",
     "minify": "closure-compiler --js bce-bos-uploader.bundle.js | uglifyjs --compress --mangle -o bce-bos-uploader.bundle.min.js"
   },
   "repository": {

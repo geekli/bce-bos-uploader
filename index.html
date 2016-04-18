@@ -150,13 +150,21 @@
       browse_button: '#file',
       multi_selection: true,
       bos_bucket: 'bce-bos-uploader',
+      // bos_endpoint: 'http://bos.bj.baidubce.com////',
+      // bos_ak: '070c62ecc9f74414a52f65212fb3e6ee',
+      // bos_sk: '99e4bfe6dde04da18f235fbf647e4667',
+      // uptoken: 'MjUzZjQzNTY4OTE0NDRkNjg3N2E4YzJhZTc4YmU5ZDh8AAAAAAoCAAAmY7CAlLxYPiJEWNh+oj21qzqYAT13HypF3vHswny6IdVFq/RMFImzs58GLtuGSKRBR6o9U9ksH7sG5RED37pnEDDjL8kRFm9AnpfOjhRIklv5hACuA/mPEzgreWQSjAFktrY/XcACIL5J2pZ4nsRzV8pN9A4nbbfsH64t5WCyxyukEdw6HSxgsku272SLgu4BopARyVvnT9fGaMP704srZrm6Jb6CIC0CENTYtGN8mdE5yCAXDFMxSe3Ne70qnxZ4nT9xol8orrZucsHx3IL0IYoILW41bluL3X8Jt1DCHHg6ClY8UYq3bXI6f+IUzyLk/ZIuHytSnfqL10wu7o3O3gGLn/DqZQ8RV0+DDzBe2Qxrh4jU1OJ9LXU5v19E7uQeKnkKxPQibtJSAUp9uh86',
       uptoken_url: 'http://180.76.133.248:1337/ack',
+      // uptoken_url: 'http://localhost.baidu.com:1337/ack',
       get_new_uptoken: false,
       auto_start: false,
       max_retries: 2,
       max_file_size: '500mb',
-      accept: 'zip,rar,pdf,avi',
+      chunk_size: '1m',
+      dir_selection: false,
       flash_swf_url: 'bower_components/moxie/bin/flash/Moxie.swf',
+      accept: 'zip,rar,pdf,avi',
+      // bos_multipart_local_key_generator: 'md5',
       init: {
         FilesFilter: function (_, files) {
           // 添加更多的过滤规则，比如文件大小之类的
@@ -208,7 +216,13 @@
             day = '0' + day;
           }
 
-          return year + '/' + month + '/' + day + '/' + file.name;
+          var deferred = baidubce.sdk.Q.defer();
+          var delay = ~~(2 + Math.random() * 5);    // (2, 7);
+          setTimeout(function () {
+              var key = year + '/' + month + '/' + day + '/' + file.name;
+              deferred.resolve(key);
+          }, delay * 1000);
+          return deferred.promise;
         },
         FileUploaded: function (_, file, info) {
           var row = getRowById(file.__id);
@@ -218,6 +232,9 @@
         },
         UploadComplete: function () {
           // TODO
+        },
+        ChunkUploaded: function (_, file, result) {
+          console.log(result);
         },
         Error: function (_, error, file) {
           var row = getRowById(file.__id);
