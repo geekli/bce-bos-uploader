@@ -14,8 +14,6 @@
  * @author leeight
  */
 
-var urlModule = require('url');
-var qsModule = require('querystring');
 var sdk = require('bce-sdk-js');
 var u = require('underscore');
 var async = require('async');
@@ -381,7 +379,9 @@ Uploader.prototype._initEvents = function () {
         //    GET /bj.bcebos.com/v1/bucket/object?httpMethod=HEAD
         //    Host: relay.efe.tech
         //    Authorization: xxx
-        this.client.sendHTTPRequest = u.bind(this._customHTTPRequestHandler, this);
+        // options.bos_relay_server
+        // options.swf_url
+        this.client.sendHTTPRequest = utils.fixXhr(this.client, this.options);
     }
 };
 
@@ -598,19 +598,19 @@ Uploader.prototype._uploadNextViaMultipart = function (file, bucket, object) {
                     .then(function (payload) {
                         var parts = payload.body.parts;
                         var eTagMap = {};
-                        for (var i = 0; i < parts.length; i ++) {
+                        for (var i = 0; i < parts.length; i++) {
                             var part = parts[i];
                             var partNumber = part.partNumber;
                             var eTag = part.eTag;
                             eTagMap[partNumber] = eTag;
                         }
-                        for (var i = 0; i < responses.length; i ++) {
+                        for (i = 0; i < responses.length; i++) {
                             var item = responses[i];
-                            var eTag = eTagMap['' + (i + 1)];
+                            eTag = eTagMap['' + (i + 1)];
                             if (eTag) {
                                 item.http_headers.etag = eTag;
                             }
-                        };
+                        }
                         return responses;
                     });
             }
@@ -737,11 +737,6 @@ Uploader.prototype._listParts = function (bucket, object, uploadId) {
         });
 };
 
-/**
- * @param {string} bucket The bucket name.
- * @param {string} object The object name.
- * @param {string} uploadId The multipart upload id.
- */
 Uploader.prototype._listAllParts = function (bucket, object, uploadId) {
     // isTruncated === true / false
     var self = this;
@@ -779,7 +774,7 @@ Uploader.prototype._listAllParts = function (bucket, object, uploadId) {
             .catch(function (error) {
                 deferred.reject(error);
             });
-    };
+    }
     listParts();
 
     return deferred.promise;
@@ -922,168 +917,6 @@ Uploader.prototype._getObjectMetadata = function (bucket, object) {
 
             throw error;
         });
-};
-
-Uploader.prototype._customHTTPRequestHandler = function (httpMethod, resource, args, config) {
-    var self = this;
-    var options = self.options;
-
-    var endpointHost = urlModule.parse(config.endpoint).host;
-    var endpointProtocol = urlModule.parse(config.endpoint).protocol;
-
-    // x-bce-date 和 Date 二选一，是必须的
-    // 但是 Flash 无法设置 Date，因此必须设置 x-bce-date
-    args.headers['x-bce-date'] = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
-    args.headers.host = endpointHost;
-
-    // Flash 的缓存貌似比较厉害，强制请求新的
-    args.params['.stamp'] = new Date().getTime();
-
-    // 只有 PUT 才会触发 progress 事件
-    var originalHttpMethod = httpMethod;
-
-    if (httpMethod === 'PUT') {
-        // PutObject PutParts 都可以用 POST 协议，而且 Flash 也只能用 POST 协议
-        httpMethod = 'POST';
-    }
-
-    var xhrUri;
-    var xhrMethod = httpMethod;
-    var xhrBody = args.body;
-    if (httpMethod === 'HEAD') {
-        // 因为 Flash 的 URLRequest 只能发送 GET 和 POST 请求
-        // getObjectMeta需要用HEAD请求，但是 Flash 无法发起这种请求
-        // 所需需要用 relay 中转一下
-        // XXX 因为 bucket 不可能是 private，否则 crossdomain.xml 是无法读取的
-        // 所以这个接口请求的时候，可以不需要 authorization 字段
-        var relayServer = utils.normalizeEndpoint(options.bos_relay_server);
-        xhrUri = relayServer + '/' + endpointHost + resource;
-
-        args.params.httpMethod = httpMethod;
-
-        xhrMethod = 'POST';
-    }
-    else {
-        // http://bos.bj.baidubce.com/v1/${bucket}/${object}
-        // http://${bucket}.bos.bj.baidubce.com/v1/${object}
-        var chunks = ('\ufefe' + resource).split('/');
-        var bucket = chunks[2];
-        chunks.splice(0, 1);    // Remove \ufefe
-        chunks.splice(1, 1);    // Remove bucket
-
-        resource = '/' + chunks.join('/');
-
-        endpointHost = (bucket + '.' + endpointHost);
-        args.headers.host = endpointHost;
-
-        xhrUri = endpointProtocol + '//' + endpointHost + resource;
-    }
-
-    if (xhrMethod === 'POST' && !xhrBody) {
-        // 必须要有 BODY 才能是 POST，否则你设置了也没有
-        // 而且必须是 POST 才可以设置自定义的header，GET不行
-        xhrBody = '{"FORCE_POST": true}';
-    }
-
-    var deferred = sdk.Q.defer();
-
-    var xhr = new mOxie.XMLHttpRequest();
-
-    xhr.onload = function () {
-        var response = null;
-        try {
-            response = JSON.parse(xhr.response || '{}');
-        }
-        catch (ex) {
-            response = {};
-        }
-
-        if (xhr.status >= 200 && xhr.status < 300) {
-            if (httpMethod === 'HEAD') {
-                deferred.resolve(response);
-            }
-            else {
-                deferred.resolve({
-                    http_headers: {},
-                    body: response
-                });
-            }
-        }
-        else {
-            deferred.reject({
-                status_code: xhr.status,
-                message: response.message || '',
-                code: response.code || '',
-                request_id: response.requestId || ''
-            });
-        }
-    };
-
-    xhr.onerror = function (error) {
-        deferred.reject(error);
-    };
-
-    if (xhr.upload) {
-        // FIXME(分片上传的逻辑和xxx的逻辑不一样)
-        xhr.upload.onprogress = function (e) {
-            if (originalHttpMethod === 'PUT') {
-                // POST, HEAD, GET 之类的不需要触发 progress 事件
-                // 否则导致页面的逻辑混乱
-                var partNumber = args.headers['x-bce-meta-part-number'];
-                e.lengthComputable = true;
-                e._partNumber = partNumber;
-
-                self.client.emit('progress', e);
-            }
-        };
-    }
-
-    var promise = self.client.createSignature(null, httpMethod,
-        resource, args.params, args.headers);
-    promise.then(function (authorization, xbceDate) {
-        if (authorization) {
-            args.headers.authorization = authorization;
-        }
-
-        if (xbceDate) {
-            args.headers['x-bce-date'] = xbceDate;
-        }
-
-        var qs = qsModule.stringify(args.params);
-        if (qs) {
-            xhrUri += '?' + qs;
-        }
-
-        xhr.open(xhrMethod, xhrUri, true);
-
-        for (var key in args.headers) {
-            if (!args.headers.hasOwnProperty(key)
-                || key === 'host') {
-                continue;
-            }
-            var value = args.headers[key];
-            xhr.setRequestHeader(key, value);
-        }
-
-        /*
-        alert([
-            'xhrMethod=' + xhrMethod,
-            'xhrUri=' + xhrUri,
-            'headers=' + JSON.stringify(args.headers),
-            'params=' + JSON.stringify(args.params)
-        ].join('\n'));
-        */
-
-        xhr.send(xhrBody, {
-            runtime_order: 'flash',
-            swf_url: self.options.flash_swf_url
-        });
-    })
-    .catch(function (error) {
-        deferred.reject(error);
-    });
-
-    return deferred.promise;
 };
 
 Uploader.prototype._uploadNextViaAppendObject = function (file, bucket, object) {

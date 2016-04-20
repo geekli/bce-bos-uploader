@@ -17,11 +17,13 @@
 var sdk = require('bce-sdk-js');
 
 var Uploader = require('./src/uploader');
+var utils = require('./src/utils');
 
 module.exports = {
     bos: {
         Uploader: Uploader
     },
+    utils: utils,
     sdk: sdk
 };
 
