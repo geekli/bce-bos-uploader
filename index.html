@@ -65,7 +65,7 @@
           <form class="form-inline">
             <div class="form-group">
               <span class="btn btn-default btn-file">
-                <span class="glyphicon glyphicon-paperclip"></span> 选择(500M以内)的文件(*.zip,*.rar,*.pdf,*.avi)
+                <span class="glyphicon glyphicon-paperclip"></span> 选择1Gb以内的文件
                 <input type="file" id="file" />
               </span>
               <button type="submit" class="btn btn-success" disabled>开始上传</button>
@@ -165,13 +165,13 @@
       bos_token_mode: 'sts',
       auto_start: false,
       max_retries: 2,
-      max_file_size: '500mb',
+      max_file_size: '1024mb',
       bos_multipart_min_size: '10m',
       bos_multipart_parallel: 1,
       chunk_size: '1m',
       dir_selection: false,
       flash_swf_url: 'bower_components/moxie/bin/flash/Moxie.swf',
-      accept: 'zip,rar,pdf,avi',
+      // accept: 'zip,rar,pdf,avi',
       // bos_multipart_local_key_generator: 'md5',
       init: {
         FilesFilter: function (_, files) {
