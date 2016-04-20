@@ -101,6 +101,17 @@
     var __id = 0;
     var __isEmpty = true;
 
+    function noop() {
+    }
+
+    if (typeof localStorage === 'undefined') {
+      var localStorage = {
+        getItem: noop,
+        setItem: noop,
+        removeItem: noop
+      };
+    }
+
     function toUrl(object) {
       var url = 'http://bce-bos-uploader.bceimg.com/' + encodeURIComponent(object).replace(/%2F/gi, '/');
       return url;
@@ -150,16 +161,13 @@
       browse_button: '#file',
       multi_selection: true,
       bos_bucket: 'bce-bos-uploader',
-      // bos_endpoint: 'http://bos.bj.baidubce.com////',
-      // bos_ak: '070c62ecc9f74414a52f65212fb3e6ee',
-      // bos_sk: '99e4bfe6dde04da18f235fbf647e4667',
-      // uptoken: 'MjUzZjQzNTY4OTE0NDRkNjg3N2E4YzJhZTc4YmU5ZDh8AAAAAAoCAAAmY7CAlLxYPiJEWNh+oj21qzqYAT13HypF3vHswny6IdVFq/RMFImzs58GLtuGSKRBR6o9U9ksH7sG5RED37pnEDDjL8kRFm9AnpfOjhRIklv5hACuA/mPEzgreWQSjAFktrY/XcACIL5J2pZ4nsRzV8pN9A4nbbfsH64t5WCyxyukEdw6HSxgsku272SLgu4BopARyVvnT9fGaMP704srZrm6Jb6CIC0CENTYtGN8mdE5yCAXDFMxSe3Ne70qnxZ4nT9xol8orrZucsHx3IL0IYoILW41bluL3X8Jt1DCHHg6ClY8UYq3bXI6f+IUzyLk/ZIuHytSnfqL10wu7o3O3gGLn/DqZQ8RV0+DDzBe2Qxrh4jU1OJ9LXU5v19E7uQeKnkKxPQibtJSAUp9uh86',
       uptoken_url: 'http://180.76.133.248:1337/ack',
-      // uptoken_url: 'http://localhost.baidu.com:1337/ack',
-      get_new_uptoken: false,
+      bos_token_mode: 'sts',
       auto_start: false,
       max_retries: 2,
       max_file_size: '500mb',
+      bos_multipart_min_size: '10m',
+      bos_multipart_parallel: 1,
       chunk_size: '1m',
       dir_selection: false,
       flash_swf_url: 'bower_components/moxie/bin/flash/Moxie.swf',
@@ -221,7 +229,7 @@
           setTimeout(function () {
               var key = year + '/' + month + '/' + day + '/' + file.name;
               deferred.resolve(key);
-          }, delay * 1000);
+          }, delay * 100);
           return deferred.promise;
         },
         FileUploaded: function (_, file, info) {
@@ -229,11 +237,44 @@
           var url = toUrl(info.body.object);
           row.setStatus('ok-circle', true);
           row.setUrl(url);
+          localStorage.removeItem(file.__uploadId);
         },
         UploadComplete: function () {
           // TODO
         },
+        ListParts: function (_, file, uploadId) {
+          // 恢复断点续传的时候，从本地获取 parts 的信息，避免从服务读取
+          // 有时候服务器没有开放读取的权限
+          var parts = localStorage.getItem(uploadId);
+          if (parts) {
+            try {
+              return JSON.parse(parts);
+            }
+            catch (ex) {
+            }
+          }
+        },
         ChunkUploaded: function (_, file, result) {
+          var partNumber = result.partNumber;
+          var uploadId = result.uploadId;
+          var response = result.response;
+          var eTag = response.http_headers.etag;
+
+          file.__uploadId = uploadId;
+
+          var parts = localStorage.getItem(uploadId);
+          if (!parts) {
+            parts = [];
+          }
+          else {
+            parts = JSON.parse(parts);
+          }
+          parts.push({
+            partNumber: partNumber,
+            eTag: eTag
+          });
+
+          localStorage.setItem(uploadId, JSON.stringify(parts));
           console.log(result);
         },
         Error: function (_, error, file) {

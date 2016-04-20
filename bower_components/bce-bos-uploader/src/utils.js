@@ -57,6 +57,24 @@ exports.getTasks = function (file, uploadId, chunkSize, bucket, object) {
     return tasks;
 };
 
+exports.getAppendableTasks = function (fileSize, offset, chunkSize) {
+    var leftSize = fileSize - offset;
+    var tasks = [];
+
+    while (leftSize) {
+        var partSize = Math.min(leftSize, chunkSize);
+        tasks.push({
+            partSize: partSize,
+            start: offset,
+            stop: offset + partSize - 1
+        });
+
+        leftSize -= partSize;
+        offset += partSize;
+    }
+    return tasks;
+};
+
 exports.parseSize = function (size) {
     if (typeof size === 'number') {
         return size;
@@ -85,10 +103,6 @@ exports.parseSize = function (size) {
     return +$1;
 };
 
-exports.isPromise = function (value) {
-    return (value && typeof value.then === 'function');
-};
-
 /**
  * 判断一下浏览器是否支持 xhr2 特性，如果不支持，就 fallback 到 PostObject
  * 来上传文件
@@ -98,6 +112,10 @@ exports.isPromise = function (value) {
 exports.isXhr2Supported = function () {
     // https://github.com/Modernizr/Modernizr/blob/f839e2579da2c6331eaad922ae5cd691aac7ab62/feature-detects/network/xhr2.js
     return 'XMLHttpRequest' in window && 'withCredentials' in new XMLHttpRequest();
+};
+
+exports.isAppendable = function (headers) {
+    return headers['x-bce-object-type'] === 'Appendable';
 };
 
 /**
@@ -120,31 +138,6 @@ exports.getDefaultACL = function (bucket) {
                 resource: [bucket + '/*'],
                 permission: ['READ', 'WRITE']
             }
-        ]
-    };
-};
-
-/**
- * 使用 PostObject 接口上传文件的时候，需要有默认的签名内容
- *
- * @param {string} bucket The bucket name.
- * @return {Object}
- */
-exports.getDefaultPolicy = function (bucket) {
-    if (bucket == null) {
-        return null;
-    }
-
-    var now = new Date().getTime();
-
-    // 默认是 24小时 之后到期
-    var expiration = new Date(now + 24 * 60 * 60 * 1000);
-    var utcDateTime = expiration.toISOString().replace(/\.\d+Z$/, 'Z');
-
-    return {
-        expiration: utcDateTime,
-        conditions: [
-            {bucket: bucket}
         ]
     };
 };

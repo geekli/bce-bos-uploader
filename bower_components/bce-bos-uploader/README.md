@@ -150,6 +150,14 @@ var uploader = new baidubce.bos.Uploader({
     Key: function (_, file) {
       // 如果需要重命名 BOS 存储的文件名称，这个函数
       // 返回新的文件名即可
+      // 如果这里需要执行异步的操作，可以返回 Promise 对象
+      // 如果需要自定义bucket和object，可以返回{bucket: string, key: string}
+      // 例如：
+      // return new Promise(function (resolve, reject) {
+      //   setTimeout(function () {
+      //     resolve(file.name);
+      //   }, 2000);
+      // });
     },
     FilesAdded: function (_, files) {
       // 当文件被加入到队列里面，调用这个函数
