@@ -3,14 +3,14 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>bce-bos-uploader simple demo</title>
+    <title>bce-bos-uploader MoE demo</title>
     <link rel="stylesheet" type="text/css" href="bower_components/bootstrap/dist/css/bootstrap.min.css" />
     <!--[if lt IE 8]><script src="bower_components/json3/lib/json3.min.js"></script><![endif]-->
     <!--[if lt IE 9]><script src="bower_components/js-polyfills/es5.js"></script><![endif]-->
     <!--[if lt IE 10]><script src="bower_components/moxie/bin/js/moxie.js"></script><![endif]-->
-    <script src="bower_components/jquery/dist/jquery.min.js"></script>
-    <script src="bower_components/bce-bos-uploader/bce-bos-uploader.bundle.min.js"></script>
+    <script src="bower_components/jquery/dist/jquery.js"></script>
     <script src="bower_components/humanize/humanize.js"></script>
+    <script src="bower_components/bce-bos-uploader/bce-bos-uploader.bundle.js"></script>
     <style type="text/css">
     .empty,
     .f-status {
@@ -54,18 +54,17 @@
     </style>
   </head>
   <body>
-    <a href="https://github.com/leeight/bce-bos-uploader"><img style="position: absolute; top: 0; right: 0; border: 0;" src="https://camo.githubusercontent.com/a6677b08c955af8400f44c6298f40e7d19cc5b2d/68747470733a2f2f73332e616d617a6f6e6177732e636f6d2f6769746875622f726962626f6e732f666f726b6d655f72696768745f677261795f3664366436642e706e67" alt="Fork me on GitHub" data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_right_gray_6d6d6d.png"></a>
     <div class="container">
       <div class="row">
         <div class="col-md-12">
           <h2>bce-bos-uploader demo</h2>
           <div class="alert alert-warning" role="alert">
-            文件自动上传到 bce-bos-uploader 这个bucket，后台会定期清理，请勿上传重要文件。
+            文件自动上传到 vod-gauddsywyhn713kc 这个bucket，后台会定期清理，请勿上传重要文件。
           </div>
           <form class="form-inline">
             <div class="form-group">
               <span class="btn btn-default btn-file">
-                <span class="glyphicon glyphicon-paperclip"></span> 选择1Gb以内的文件
+                <span class="glyphicon glyphicon-paperclip"></span> 选择1G以内的文件
                 <input type="file" id="file" />
               </span>
               <button type="submit" class="btn btn-success" disabled>开始上传</button>
@@ -77,6 +76,7 @@
               <col width="50px" />
               <col width="50px" />
               <col width="80px" />
+              <col width="60px" />
               <col width="100px" />
             </colgroup>
             <thead>
@@ -85,12 +85,13 @@
                 <th>状态</th>
                 <th>进度</th>
                 <th>大小</th>
+                <th>耗时(s)</th>
                 <th>文件名</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td colspan="5" class="empty">请选择文件...</td>
+                <td colspan="6" class="empty">请选择文件...</td>
               </tr>
             </tbody>
           </table>
@@ -101,19 +102,8 @@
     var __id = 0;
     var __isEmpty = true;
 
-    function noop() {
-    }
-
-    if (typeof localStorage === 'undefined') {
-      var localStorage = {
-        getItem: noop,
-        setItem: noop,
-        removeItem: noop
-      };
-    }
-
     function toUrl(object) {
-      var url = 'http://bce-bos-uploader.bceimg.com/' + encodeURIComponent(object).replace(/%2F/gi, '/');
+      var url = 'http://vod-gauddsywyhn713kc.bceimg.com/' + encodeURIComponent(object).replace(/%2F/gi, '/');
       return url;
     }
 
@@ -144,6 +134,10 @@
             container.css('color', 'red');
           }
         },
+        setTime: function (time) {
+          var container = $('#' + rowId + ' .f-time');
+          container.html(time);
+        },
         setUrl: function (url) {
           var container = $('#' + rowId + ' .f-name');
           var name = container.html();
@@ -160,9 +154,9 @@
     var uploader = new baidubce.bos.Uploader({
       browse_button: '#file',
       multi_selection: true,
-      bos_bucket: 'bce-bos-uploader',
-      uptoken_url: 'http://180.76.133.248:1337/ack',
-      bos_token_mode: 'sts',
+      bos_bucket: 'vod-gauddsywyhn713kc',
+      bos_ak: 'afe4759592064eee930682e399249aba',
+      bos_sk: '7785ea912b06449f8cbd084998a1e400',
       auto_start: false,
       max_retries: 2,
       max_file_size: '1Gb',
@@ -171,8 +165,6 @@
       chunk_size: '1m',
       dir_selection: false,
       flash_swf_url: 'bower_components/moxie/bin/flash/Moxie.swf',
-      // accept: 'zip,rar,pdf,avi',
-      // bos_multipart_local_key_generator: 'md5',
       init: {
         FilesFilter: function (_, files) {
           // 添加更多的过滤规则，比如文件大小之类的
@@ -187,6 +179,7 @@
                        + '<td class="f-status"><span class="glyphicon glyphicon-record"></span></td>'
                        + '<td class="f-progress">0.00%</td>'
                        + '<td class="f-size">' + (humanize.filesize(file.size)) + '</td>'
+                       + '<td class="f-time">-</td>'
                        + '<td class="f-name">' + (file.name) + '</td>'
                        + '</tr>';
             if (__isEmpty) {
@@ -200,6 +193,7 @@
           }
         },
         BeforeUpload: function (_, file) {
+          file.__startTime = new Date().getTime();
           var row = getRowById(file.__id);
           if (/\.(pdf)$/i.test(file.name)) {
             row.setIgnore(true);
@@ -233,10 +227,12 @@
           return deferred.promise;
         },
         FileUploaded: function (_, file, info) {
+          var time = ((new Date().getTime() - file.__startTime) / 1000).toFixed(2);
           var row = getRowById(file.__id);
           var url = toUrl(info.body.object);
           row.setStatus('ok-circle', true);
           row.setUrl(url);
+          row.setTime(time);
           localStorage.removeItem(file.__uploadId);
         },
         UploadComplete: function () {
@@ -245,13 +241,11 @@
         ListParts: function (_, file, uploadId) {
           // 恢复断点续传的时候，从本地获取 parts 的信息，避免从服务读取
           // 有时候服务器没有开放读取的权限
-          var parts = localStorage.getItem(uploadId);
-          if (parts) {
-            try {
-              return JSON.parse(parts);
-            }
-            catch (ex) {
-            }
+          try {
+            var parts = localStorage.getItem(uploadId);
+            return JSON.parse(parts);
+          }
+          catch (ex) {
           }
         },
         ChunkUploaded: function (_, file, result) {
@@ -262,20 +256,23 @@
 
           file.__uploadId = uploadId;
 
-          var parts = localStorage.getItem(uploadId);
-          if (!parts) {
-            parts = [];
-          }
-          else {
-            parts = JSON.parse(parts);
-          }
-          parts.push({
-            partNumber: partNumber,
-            eTag: eTag
-          });
+          if (eTag) {
+            var parts = localStorage.getItem(uploadId);
+            if (!parts) {
+              parts = [];
+            }
+            else {
+              parts = JSON.parse(parts);
+            }
 
-          localStorage.setItem(uploadId, JSON.stringify(parts));
-          console.log(result);
+            parts.push({
+              partNumber: partNumber,
+              eTag: eTag
+            });
+
+            localStorage.setItem(uploadId, JSON.stringify(parts));
+          }
+          console.log(JSON.stringify(result));
         },
         Error: function (_, error, file) {
           var row = getRowById(file.__id);

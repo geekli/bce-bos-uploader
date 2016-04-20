@@ -723,7 +723,7 @@ Uploader.prototype._listParts = function (bucket, object, uploadId) {
 
     return sdk.Q.resolve(localParts)
         .then(function (parts) {
-            if (u.isArray(parts)) {
+            if (u.isArray(parts) && parts.length) {
                 return {
                     http_headers: {},
                     body: {
@@ -935,6 +935,9 @@ Uploader.prototype._customHTTPRequestHandler = function (httpMethod, resource, a
     // 但是 Flash 无法设置 Date，因此必须设置 x-bce-date
     args.headers['x-bce-date'] = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
     args.headers.host = endpointHost;
+
+    // Flash 的缓存貌似比较厉害，强制请求新的
+    args.params['.stamp'] = new Date().getTime();
 
     // 只有 PUT 才会触发 progress 事件
     var originalHttpMethod = httpMethod;
