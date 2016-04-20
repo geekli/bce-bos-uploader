@@ -3242,19 +3242,19 @@ exports.DocClient = require(28);
 module.exports={
   "_args": [
     [
-      "bce-sdk-js@^0.1.3",
+      "bce-sdk-js@^0.1.4",
       "/Volumes/HDD/Users/leeight/local/case/inf/bos/bce-bos-uploader"
     ]
   ],
-  "_from": "bce-sdk-js@>=0.1.3 <0.2.0",
-  "_id": "bce-sdk-js@0.1.3",
+  "_from": "bce-sdk-js@>=0.1.4 <0.2.0",
+  "_id": "bce-sdk-js@0.1.4",
   "_inCache": true,
   "_installable": true,
   "_location": "/bce-sdk-js",
   "_nodeVersion": "5.10.1",
   "_npmOperationalInternal": {
     "host": "packages-16-east.internal.npmjs.com",
-    "tmp": "tmp/bce-sdk-js-0.1.3.tgz_1461021688041_0.3971937068272382"
+    "tmp": "tmp/bce-sdk-js-0.1.4.tgz_1461149375912_0.8904815728310496"
   },
   "_npmUser": {
     "email": "ecomfe@gmail.com",
@@ -3264,18 +3264,18 @@ module.exports={
   "_phantomChildren": {},
   "_requested": {
     "name": "bce-sdk-js",
-    "raw": "bce-sdk-js@^0.1.3",
-    "rawSpec": "^0.1.3",
+    "raw": "bce-sdk-js@^0.1.4",
+    "rawSpec": "^0.1.4",
     "scope": null,
-    "spec": ">=0.1.3 <0.2.0",
+    "spec": ">=0.1.4 <0.2.0",
     "type": "range"
   },
   "_requiredBy": [
     "/"
   ],
-  "_shasum": "6ce7fb2f2e5adfd07e956894b67063f38f4c1d68",
+  "_shasum": "94007e0e33ad86a40186b3b5dadd1800063ef49c",
   "_shrinkwrap": null,
-  "_spec": "bce-sdk-js@^0.1.3",
+  "_spec": "bce-sdk-js@^0.1.4",
   "_where": "/Volumes/HDD/Users/leeight/local/case/inf/bos/bce-bos-uploader",
   "author": {
     "name": "leeight@gmail.com"
@@ -3301,10 +3301,10 @@ module.exports={
     "test": "test"
   },
   "dist": {
-    "shasum": "6ce7fb2f2e5adfd07e956894b67063f38f4c1d68",
-    "tarball": "https://registry.npmjs.org/bce-sdk-js/-/bce-sdk-js-0.1.3.tgz"
+    "shasum": "94007e0e33ad86a40186b3b5dadd1800063ef49c",
+    "tarball": "https://registry.npmjs.org/bce-sdk-js/-/bce-sdk-js-0.1.4.tgz"
   },
-  "gitHead": "81d98b1bf5f98b741efbafe27949bd0996120267",
+  "gitHead": "49b5c7ef455ae0e7f9052cab219ddb46ed11b703",
   "homepage": "https://github.com/baidubce/bce-sdk-js#readme",
   "license": "MIT",
   "main": "index.js",
@@ -3326,7 +3326,7 @@ module.exports={
     "pack": "browserify -s baidubce.sdk index.js -o baidubce-sdk.bundle.js && uglifyjs baidubce-sdk.bundle.js --compress --mangle -o baidubce-sdk.bundle.min.js",
     "test": "./test/run-all.sh"
   },
-  "version": "0.1.3"
+  "version": "0.1.4"
 }
 
 },{}],21:[function(require,module,exports){
@@ -3807,7 +3807,14 @@ BceBaseClient.prototype.sendRequest = function (httpMethod, resource, varArgs) {
     var args = u.extend(defaultArgs, varArgs);
 
     var config = u.extend({}, this.config, args.config);
+    if (config.sessionToken) {
+        args.headers[H.SESSION_TOKEN] = config.sessionToken;
+    }
 
+    return this.sendHTTPRequest(httpMethod, resource, args, config);
+};
+
+BceBaseClient.prototype.sendHTTPRequest = function (httpMethod, resource, args, config) {
     var client = this;
     var agent = this._httpAgent = new HttpClient(config);
     u.each(['progress', 'error', 'abort'], function (eventName) {
@@ -3816,9 +3823,6 @@ BceBaseClient.prototype.sendRequest = function (httpMethod, resource, varArgs) {
         });
     });
 
-    if (config.sessionToken) {
-        args.headers[H.SESSION_TOKEN] = config.sessionToken;
-    }
     return this._httpAgent.sendRequest(httpMethod, resource, args.body,
         args.headers, args.params, u.bind(this.createSignature, this),
         args.outputStream
@@ -9433,6 +9437,8 @@ VodClient.prototype.getMediaResource = function (mediaId, options) {
 VodClient.prototype.listMediaResource = function (options) {
     return this.buildRequest('GET', null, null, options);
 };
+
+VodClient.prototype.listMediaResources = VodClient.prototype.listMediaResource;
 
 VodClient.prototype.updateMediaResource = function (mediaId, title, description, options) {
     options = options || {};

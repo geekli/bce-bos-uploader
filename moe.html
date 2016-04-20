@@ -12,6 +12,9 @@
     <script src="bower_components/humanize/humanize.js"></script>
     <script src="bower_components/bce-bos-uploader/bce-bos-uploader.bundle.js"></script>
     <style type="text/css">
+    .table {
+      table-layout: fixed;
+    }
     .empty,
     .f-status {
         text-align: center;
@@ -40,6 +43,7 @@
     }
     table th,
     .f-progress,
+    .f-mediaId,
     .f-size {
         white-space: nowrap;
     }
@@ -67,7 +71,7 @@
                 <span class="glyphicon glyphicon-paperclip"></span> 选择1G以内的文件
                 <input type="file" id="file" />
               </span>
-              <button type="submit" class="btn btn-success" disabled>开始上传</button>
+              <button type="submit" class="btn btn-success" disabled>上传媒资</button>
             </div>
           </form>
           <br />
@@ -76,8 +80,9 @@
               <col width="50px" />
               <col width="50px" />
               <col width="80px" />
-              <col width="60px" />
-              <col width="100px" />
+              <col width="80px" />
+              <col width="80px" />
+              <col width="180px" />
             </colgroup>
             <thead>
               <tr>
@@ -86,12 +91,13 @@
                 <th>进度</th>
                 <th>大小</th>
                 <th>耗时(s)</th>
+                <th>媒资ID</th>
                 <th>文件名</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td colspan="6" class="empty">请选择文件...</td>
+                <td colspan="7" class="empty">请选择文件...</td>
               </tr>
             </tbody>
           </table>
@@ -99,16 +105,16 @@
       </div>
     </div>
     <script>
-    var __id = 0;
+    var __uuid = 0;
     var __isEmpty = true;
 
     function toUrl(object) {
-      var url = 'http://vod-gauddsywyhn713kc.bceimg.com/' + encodeURIComponent(object).replace(/%2F/gi, '/');
+      var url = 'http://bj.bcebos.com/vod-gauddsywyhn713kc/' + encodeURIComponent(object).replace(/%2F/gi, '/');
       return url;
     }
 
     function getIdByName(name) {
-      return 'f' + (__id ++);
+      return 'f' + (__uuid ++);
     }
 
     function getRowById(rowId) {
@@ -138,6 +144,10 @@
           var container = $('#' + rowId + ' .f-time');
           container.html(time);
         },
+        setMediaId: function (mediaId) {
+          var container = $('#' + rowId + ' .f-media');
+          container.html(mediaId);
+        },
         setUrl: function (url) {
           var container = $('#' + rowId + ' .f-name');
           var name = container.html();
@@ -151,18 +161,77 @@
       };
     }
 
+    var AK = 'afe4759592064eee930682e399249aba';
+    var SK = '7785ea912b06449f8cbd084998a1e400';
+    var CHUNK_SIZE = '1m';
+    var vod = new baidubce.sdk.VodClient({
+        endpoint: 'http://vod.baidubce.com',
+        credentials: {
+            ak: AK,
+            sk: SK
+        }
+    });
+
+    function getVodKey(file) {
+      var localKey = [file.name, file.size, CHUNK_SIZE].join('&');
+      var localValue = localStorage.getItem(localKey);
+      if (!localValue) {
+          return vod._generateMediaId().then(function (response) {
+              var mediaId = response.body.mediaId;
+              var bucket = response.body.sourceBucket;
+              var key = response.body.sourceKey;
+              localStorage.setItem(localKey, JSON.stringify(response.body));
+              file.__mediaId = mediaId;
+              return {
+                  bucket: bucket,
+                  key: key
+              };
+          });
+      }
+      else {
+          localValue = JSON.parse(localValue);
+          file.__mediaId = localValue.mediaId;
+          return {
+              bucket: localValue.sourceBucket,
+              key: localValue.sourceKey
+          };
+      }
+    }
+
+    function getDefaultKey(file) {
+      var date = new Date();
+      var year = date.getFullYear();
+
+      var month = date.getMonth() + 1;
+      if (month < 10) {
+        month = '0' + month;
+      }
+      var day = date.getDate();
+      if (day < 10) {
+        day = '0' + day;
+      }
+
+      var deferred = baidubce.sdk.Q.defer();
+      var delay = ~~(2 + Math.random() * 5);    // (2, 7);
+      setTimeout(function () {
+        var key = year + '/' + month + '/' + day + '/' + file.name;
+        deferred.resolve(key);
+      }, delay * 100);
+      return deferred.promise;
+    }
+
     var uploader = new baidubce.bos.Uploader({
       browse_button: '#file',
       multi_selection: true,
       bos_bucket: 'vod-gauddsywyhn713kc',
-      bos_ak: 'afe4759592064eee930682e399249aba',
-      bos_sk: '7785ea912b06449f8cbd084998a1e400',
+      bos_ak: AK,
+      bos_sk: SK,
       auto_start: false,
       max_retries: 2,
       max_file_size: '1Gb',
       bos_multipart_min_size: '10m',
       bos_multipart_parallel: 1,
-      chunk_size: '1m',
+      chunk_size: CHUNK_SIZE,
       dir_selection: false,
       flash_swf_url: 'bower_components/moxie/bin/flash/Moxie.swf',
       init: {
@@ -175,11 +244,12 @@
             var id = getIdByName(file.name);
             file.__id = id;
             var html = '<tr id="' + id + '">'
-                       + '<td class="f-id">' + (__id) + '</td>'
+                       + '<td class="f-id">' + (__uuid) + '</td>'
                        + '<td class="f-status"><span class="glyphicon glyphicon-record"></span></td>'
                        + '<td class="f-progress">0.00%</td>'
                        + '<td class="f-size">' + (humanize.filesize(file.size)) + '</td>'
                        + '<td class="f-time">-</td>'
+                       + '<td class="f-media">-</td>'
                        + '<td class="f-name">' + (file.name) + '</td>'
                        + '</tr>';
             if (__isEmpty) {
@@ -206,25 +276,7 @@
           row.setProgress(progress);
         },
         Key: function (_, file) {
-          var date = new Date();
-          var year = date.getFullYear();
-
-          var month = date.getMonth() + 1;
-          if (month < 10) {
-            month = '0' + month;
-          }
-          var day = date.getDate();
-          if (day < 10) {
-            day = '0' + day;
-          }
-
-          var deferred = baidubce.sdk.Q.defer();
-          var delay = ~~(2 + Math.random() * 5);    // (2, 7);
-          setTimeout(function () {
-              var key = year + '/' + month + '/' + day + '/' + file.name;
-              deferred.resolve(key);
-          }, delay * 100);
-          return deferred.promise;
+          return getDefaultKey(file);
         },
         FileUploaded: function (_, file, info) {
           var time = ((new Date().getTime() - file.__startTime) / 1000).toFixed(2);
@@ -233,7 +285,15 @@
           row.setStatus('ok-circle', true);
           row.setUrl(url);
           row.setTime(time);
-          localStorage.removeItem(file.__uploadId);
+
+          /*
+          var localKey = [file.name, file.size, CHUNK_SIZE].join('&');
+          localStorage.removeItem(localKey);
+          vod._internalCreateMediaResource(file.__mediaId, file.name, '测试文件')
+              .then(function () {
+                  row.setMediaId(file.__mediaId);
+              });
+          */
         },
         UploadComplete: function () {
           // TODO
@@ -249,29 +309,6 @@
           }
         },
         ChunkUploaded: function (_, file, result) {
-          var partNumber = result.partNumber;
-          var uploadId = result.uploadId;
-          var response = result.response;
-          var eTag = response.http_headers.etag;
-
-          file.__uploadId = uploadId;
-
-          if (eTag) {
-            var parts = localStorage.getItem(uploadId);
-            if (!parts) {
-              parts = [];
-            }
-            else {
-              parts = JSON.parse(parts);
-            }
-
-            parts.push({
-              partNumber: partNumber,
-              eTag: eTag
-            });
-
-            localStorage.setItem(uploadId, JSON.stringify(parts));
-          }
           console.log(JSON.stringify(result));
         },
         Error: function (_, error, file) {
