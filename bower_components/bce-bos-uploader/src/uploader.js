@@ -381,7 +381,10 @@ Uploader.prototype._initEvents = function () {
         //    Authorization: xxx
         // options.bos_relay_server
         // options.swf_url
-        this.client.sendHTTPRequest = utils.fixXhr(this.client, this.options);
+        this.client.sendHTTPRequest = u.bind(utils.fixXhr(this.options), this.client);
+
+        // 自动修复一些其它 XXXClient 发送请求的接口
+        sdk.VodClient.prototype.sendHTTPRequest = utils.fixXhr(this.options);
     }
 };
 

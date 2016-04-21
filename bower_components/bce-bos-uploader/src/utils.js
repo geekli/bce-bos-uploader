@@ -341,8 +341,9 @@ exports.expandAcceptToArray = function (accept) {
     return [];
 };
 
-exports.fixXhr = function (client, options) {
+exports.fixXhr = function (options) {
     return function (httpMethod, resource, args, config) {
+        var client = this;
         var endpointHost = urlModule.parse(config.endpoint).host;
         var endpointProtocol = urlModule.parse(config.endpoint).protocol;
 

@@ -176,7 +176,8 @@
       var localKey = [file.name, file.size, CHUNK_SIZE].join('&');
       var localValue = localStorage.getItem(localKey);
       if (!localValue) {
-          return vod._generateMediaId().then(function (response) {
+          // return vod._generateMediaId().then(function (response) {
+          return vod.buildRequest('POST', null, 'apply').then(function (response) {
               var mediaId = response.body.mediaId;
               var bucket = response.body.sourceBucket;
               var key = response.body.sourceKey;
@@ -276,7 +277,8 @@
           row.setProgress(progress);
         },
         Key: function (_, file) {
-          return getDefaultKey(file);
+          // return getDefaultKey(file);
+          return getVodKey(file);
         },
         FileUploaded: function (_, file, info) {
           var time = ((new Date().getTime() - file.__startTime) / 1000).toFixed(2);
@@ -286,14 +288,17 @@
           row.setUrl(url);
           row.setTime(time);
 
-          /*
           var localKey = [file.name, file.size, CHUNK_SIZE].join('&');
           localStorage.removeItem(localKey);
-          vod._internalCreateMediaResource(file.__mediaId, file.name, '测试文件')
+
+          var requestBody = JSON.stringify({
+              title: file.name,
+              description: '测试文件'
+          });
+          vod.buildRequest('PUT', file.__mediaId, 'process', {body: requestBody})
               .then(function () {
                   row.setMediaId(file.__mediaId);
               });
-          */
         },
         UploadComplete: function () {
           // TODO
