@@ -109,7 +109,11 @@
     var __isEmpty = true;
 
     function toUrl(object) {
-      var url = 'http://bj.bcebos.com/vod-gauddsywyhn713kc/' + encodeURIComponent(object).replace(/%2F/gi, '/');
+      var url = [
+        BOS_ENDPOINT,
+        BOS_BUCKET,
+        encodeURIComponent(object).replace(/%2F/gi, '/')
+      ].join('/');
       return url;
     }
 
@@ -161,41 +165,67 @@
       };
     }
 
-    var AK = 'afe4759592064eee930682e399249aba';
-    var SK = '7785ea912b06449f8cbd084998a1e400';
-    var CHUNK_SIZE = '1m';
-    var vod = new baidubce.sdk.VodClient({
-        endpoint: 'http://vod.baidubce.com',
-        credentials: {
-            ak: AK,
-            sk: SK
+    var __queryMap = null;
+    function getQuery(id, opt_defaultValue) {
+      if (!__queryMap) {
+        __queryMap = {};
+        var string = location.search.substr(1);
+        if (string) {
+          var chunks = string.split('&');
+          for (var i = 0; i < chunks.length; i++) {
+            var item = chunks[i].split('=');
+            var key = item[0];
+            var value = item[1];
+            if (value) {
+              value = decodeURIComponent(value);
+            }
+            __queryMap[key] = value;
+          }
         }
+      }
+      return __queryMap[id] || opt_defaultValue;
+    }
+
+    var AK = getQuery('ak', 'afe4759592064eee930682e399249aba');
+    var SK = getQuery('sk', '7785ea912b06449f8cbd084998a1e400');
+    var VOD_ENDPOINT = getQuery('vod.endpoint', 'http://vod.baidubce.com');
+    var BOS_ENDPOINT = getQuery('bos.endpoint', 'http://bos.bj.baidubce.com');
+    var BOS_BUCKET = getQuery('bos.bucket', 'vod-gauddsywyhn713kc');
+
+    var CHUNK_SIZE = '1m';
+
+    var vod = new baidubce.sdk.VodClient({
+      endpoint: VOD_ENDPOINT,
+      credentials: {ak: AK, sk: SK}
     });
 
     function getVodKey(file) {
       var localKey = [file.name, file.size, CHUNK_SIZE].join('&');
       var localValue = localStorage.getItem(localKey);
       if (!localValue) {
-          // return vod._generateMediaId().then(function (response) {
-          return vod.buildRequest('POST', null, 'apply').then(function (response) {
-              var mediaId = response.body.mediaId;
-              var bucket = response.body.sourceBucket;
-              var key = response.body.sourceKey;
-              localStorage.setItem(localKey, JSON.stringify(response.body));
-              file.__mediaId = mediaId;
-              return {
-                  bucket: bucket,
-                  key: key
-              };
-          });
+        return vod.buildRequest('POST', null, 'apply').then(function (response) {
+          var mediaId = response.body.mediaId;
+          var bucket = response.body.sourceBucket;
+          var key = response.body.sourceKey;
+          localStorage.setItem(localKey, JSON.stringify(response.body));
+          file.__mediaId = mediaId;
+          return {
+            bucket: bucket,
+            key: key
+          };
+        }).catch(function (error) {
+          uploader._invoke('Error', [error, uploader._currentFile]);
+          uploader._uploadNext();
+          throw error;
+        });
       }
       else {
-          localValue = JSON.parse(localValue);
-          file.__mediaId = localValue.mediaId;
-          return {
-              bucket: localValue.sourceBucket,
-              key: localValue.sourceKey
-          };
+        localValue = JSON.parse(localValue);
+        file.__mediaId = localValue.mediaId;
+        return {
+          bucket: localValue.sourceBucket,
+          key: localValue.sourceKey
+        };
       }
     }
 
@@ -224,13 +254,14 @@
     var uploader = new baidubce.bos.Uploader({
       browse_button: '#file',
       multi_selection: true,
-      bos_bucket: 'vod-gauddsywyhn713kc',
+      bos_bucket: BOS_BUCKET,
+      bos_endpoint: BOS_ENDPOINT,
       bos_ak: AK,
       bos_sk: SK,
       auto_start: false,
       max_retries: 2,
       max_file_size: '1Gb',
-      bos_multipart_min_size: '10m',
+      bos_multipart_min_size: '50m',
       bos_multipart_parallel: 1,
       chunk_size: CHUNK_SIZE,
       dir_selection: false,
