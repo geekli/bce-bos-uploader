@@ -291,11 +291,7 @@
           var localKey = [file.name, file.size, CHUNK_SIZE].join('&');
           localStorage.removeItem(localKey);
 
-          var requestBody = JSON.stringify({
-              title: file.name,
-              description: '测试文件'
-          });
-          vod.buildRequest('PUT', file.__mediaId, 'process', {body: requestBody})
+          vod._internalCreateMediaResource(file.__mediaId, file.name, '测试文件')
               .then(function () {
                   row.setMediaId(file.__mediaId);
               });
