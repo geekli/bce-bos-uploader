@@ -200,7 +200,7 @@
     });
 
     function getVodKey(file) {
-      var localKey = [file.name, file.size, CHUNK_SIZE].join('&');
+      var localKey = [AK, file.name, file.size, CHUNK_SIZE].join('&');
       var localValue = localStorage.getItem(localKey);
       if (!localValue) {
         return vod.buildRequest('POST', null, 'apply').then(function (response) {
@@ -319,7 +319,7 @@
           row.setUrl(url);
           row.setTime(time);
 
-          var localKey = [file.name, file.size, CHUNK_SIZE].join('&');
+          var localKey = [AK, file.name, file.size, CHUNK_SIZE].join('&');
           localStorage.removeItem(localKey);
 
           vod._internalCreateMediaResource(file.__mediaId, file.name, '测试文件')
