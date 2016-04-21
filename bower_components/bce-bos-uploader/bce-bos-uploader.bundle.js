@@ -35952,6 +35952,7 @@ Uploader.prototype._initEvents = function () {
 
         // 自动修复一些其它 XXXClient 发送请求的接口
         sdk.VodClient.prototype.sendHTTPRequest = utils.fixXhr(this.options);
+        sdk.DocClient.Document.prototype.sendHTTPRequest = utils.fixXhr(this.options);
     }
 };
 

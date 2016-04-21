@@ -31,15 +31,15 @@
     "bootstrap": "^3.3.6",
     "json3": "^3.3.2"
   },
-  "version": "1.1.8-rc.5",
-  "_release": "1.1.8-rc.5",
+  "version": "1.1.8-rc.6",
+  "_release": "1.1.8-rc.6",
   "_resolution": {
     "type": "version",
-    "tag": "1.1.8-rc.5",
-    "commit": "1def0e39f62e59feb1ebc48e227bb82308aadd9f"
+    "tag": "1.1.8-rc.6",
+    "commit": "3df9ac98a7de71c33528f1d76c536b3655d5bea2"
   },
   "_source": "https://github.com/leeight/bce-bos-uploader.git",
-  "_target": "1.1.8-rc.5",
+  "_target": "1.1.8-rc.6",
   "_originalSource": "bce-bos-uploader",
   "_direct": true
 }
