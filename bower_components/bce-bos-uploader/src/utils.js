@@ -341,7 +341,7 @@ exports.expandAcceptToArray = function (accept) {
     return [];
 };
 
-exports.fixXhr = function (options) {
+exports.fixXhr = function (options, isBos) {
     return function (httpMethod, resource, args, config) {
         var client = this;
         var endpointHost = urlModule.parse(config.endpoint).host;
@@ -379,7 +379,7 @@ exports.fixXhr = function (options) {
 
             xhrMethod = 'POST';
         }
-        else {
+        else if (isBos === true) {
             // http://bos.bj.baidubce.com/v1/${bucket}/${object}
             // http://${bucket}.bos.bj.baidubce.com/v1/${object}
             var chunks = ('\ufefe' + resource).split('/');
@@ -393,6 +393,9 @@ exports.fixXhr = function (options) {
             args.headers.host = endpointHost;
 
             xhrUri = endpointProtocol + '//' + endpointHost + resource;
+        }
+        else {
+            xhrUri = config.endpoint + resource;
         }
 
         if (xhrMethod === 'POST' && !xhrBody) {

@@ -35948,7 +35948,7 @@ Uploader.prototype._initEvents = function () {
         //    Authorization: xxx
         // options.bos_relay_server
         // options.swf_url
-        this.client.sendHTTPRequest = u.bind(utils.fixXhr(this.options), this.client);
+        this.client.sendHTTPRequest = u.bind(utils.fixXhr(this.options, true), this.client);
 
         // 自动修复一些其它 XXXClient 发送请求的接口
         sdk.VodClient.prototype.sendHTTPRequest = utils.fixXhr(this.options);
@@ -36956,7 +36956,7 @@ exports.expandAcceptToArray = function (accept) {
     return [];
 };
 
-exports.fixXhr = function (options) {
+exports.fixXhr = function (options, isBos) {
     return function (httpMethod, resource, args, config) {
         var client = this;
         var endpointHost = urlModule.parse(config.endpoint).host;
@@ -36994,7 +36994,7 @@ exports.fixXhr = function (options) {
 
             xhrMethod = 'POST';
         }
-        else {
+        else if (isBos === true) {
             // http://bos.bj.baidubce.com/v1/${bucket}/${object}
             // http://${bucket}.bos.bj.baidubce.com/v1/${object}
             var chunks = ('\ufefe' + resource).split('/');
@@ -37008,6 +37008,9 @@ exports.fixXhr = function (options) {
             args.headers.host = endpointHost;
 
             xhrUri = endpointProtocol + '//' + endpointHost + resource;
+        }
+        else {
+            xhrUri = config.endpoint + resource;
         }
 
         if (xhrMethod === 'POST' && !xhrBody) {
