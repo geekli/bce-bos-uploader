@@ -37184,11 +37184,31 @@ exports.expandAcceptToArray = function (accept) {
     return [];
 };
 
+/**
+ * 转化一下 bos url 的格式
+ * http://bj.bcebos.com/v1/${bucket}/${object} -> http://${bucket}.bj.bcebos.com/v1/${object}
+ *
+ * @param {string} url 需要转化的URL.
+ * @return {string}
+ */
+exports.transformUrl = function (url) {
+    var pattern = /(https?:)\/\/([^\/]+)\/([^\/]+)\/([^\/]+)/;
+    return url.replace(pattern, function (_, protocol, host, $3, $4) {
+        if (/^v\d$/.test($3)) {
+            // /v1/${bucket}/...
+            return protocol + '//' + $4 + '.' + host + '/' + $3;
+        }
+        else {
+            // /${bucket}/...
+            return protocol + '//' + $3 + '.' + host + '/' + $4;
+        }
+    });
+};
+
 exports.fixXhr = function (options, isBos) {
     return function (httpMethod, resource, args, config) {
         var client = this;
         var endpointHost = urlModule.parse(config.endpoint).host;
-        var endpointProtocol = urlModule.parse(config.endpoint).protocol;
 
         // x-bce-date 和 Date 二选一，是必须的
         // 但是 Flash 无法设置 Date，因此必须设置 x-bce-date
@@ -37223,19 +37243,8 @@ exports.fixXhr = function (options, isBos) {
             xhrMethod = 'POST';
         }
         else if (isBos === true) {
-            // http://bos.bj.baidubce.com/v1/${bucket}/${object}
-            // http://${bucket}.bos.bj.baidubce.com/v1/${object}
-            var chunks = ('\ufefe' + resource).split('/');
-            var bucket = chunks[2];
-            chunks.splice(0, 1);    // Remove \ufefe
-            chunks.splice(1, 1);    // Remove bucket
-
-            resource = '/' + chunks.join('/');
-
-            endpointHost = (bucket + '.' + endpointHost);
-            args.headers.host = endpointHost;
-
-            xhrUri = endpointProtocol + '//' + endpointHost + resource;
+            xhrUri = exports.transformUrl(config.endpoint + resource);
+            args.headers.host = urlModule.parse(xhrUri).host;
         }
         else {
             xhrUri = config.endpoint + resource;
