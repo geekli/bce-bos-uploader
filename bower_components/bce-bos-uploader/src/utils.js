@@ -230,6 +230,25 @@ exports.md5sum = function (file) {
     return deferred.promise;
 };
 
+exports.getDefaultPolicy = function (bucket) {
+    if (bucket == null) {
+        return null;
+    }
+
+    var now = new Date().getTime();
+
+    // 默认是 24小时 之后到期
+    var expiration = new Date(now + 24 * 60 * 60 * 1000);
+    var utcDateTime = expiration.toISOString().replace(/\.\d+Z$/, 'Z');
+
+    return {
+        expiration: utcDateTime,
+        conditions: [
+            {bucket: bucket}
+        ]
+    };
+};
+
 /**
  * 根据key获取localStorage中的uploadId
  *

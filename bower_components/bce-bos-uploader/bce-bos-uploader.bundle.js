@@ -3249,14 +3249,14 @@ module.exports={
     ]
   ],
   "_from": "bce-sdk-js@>=0.1.4 <0.2.0",
-  "_id": "bce-sdk-js@0.1.4",
+  "_id": "bce-sdk-js@0.1.5",
   "_inCache": true,
   "_installable": true,
   "_location": "/bce-sdk-js",
   "_nodeVersion": "5.10.1",
   "_npmOperationalInternal": {
-    "host": "packages-16-east.internal.npmjs.com",
-    "tmp": "tmp/bce-sdk-js-0.1.4.tgz_1461149375912_0.8904815728310496"
+    "host": "packages-12-west.internal.npmjs.com",
+    "tmp": "tmp/bce-sdk-js-0.1.5.tgz_1461310033381_0.7385708538349718"
   },
   "_npmUser": {
     "email": "ecomfe@gmail.com",
@@ -3275,7 +3275,7 @@ module.exports={
   "_requiredBy": [
     "/"
   ],
-  "_shasum": "94007e0e33ad86a40186b3b5dadd1800063ef49c",
+  "_shasum": "1564b8420398efec1828a90d5ca4a29c53597f3d",
   "_shrinkwrap": null,
   "_spec": "bce-sdk-js@^0.1.4",
   "_where": "/Volumes/HDD/Users/leeight/local/case/inf/bos/bce-bos-uploader",
@@ -3303,10 +3303,10 @@ module.exports={
     "test": "test"
   },
   "dist": {
-    "shasum": "94007e0e33ad86a40186b3b5dadd1800063ef49c",
-    "tarball": "https://registry.npmjs.org/bce-sdk-js/-/bce-sdk-js-0.1.4.tgz"
+    "shasum": "1564b8420398efec1828a90d5ca4a29c53597f3d",
+    "tarball": "https://registry.npmjs.org/bce-sdk-js/-/bce-sdk-js-0.1.5.tgz"
   },
-  "gitHead": "49b5c7ef455ae0e7f9052cab219ddb46ed11b703",
+  "gitHead": "443932c407f3df29acc707dfed158f043ff38125",
   "homepage": "https://github.com/baidubce/bce-sdk-js#readme",
   "license": "MIT",
   "main": "index.js",
@@ -3328,7 +3328,7 @@ module.exports={
     "pack": "browserify -s baidubce.sdk index.js -o baidubce-sdk.bundle.js && uglifyjs baidubce-sdk.bundle.js --compress --mangle -o baidubce-sdk.bundle.min.js",
     "test": "./test/run-all.sh"
   },
-  "version": "0.1.4"
+  "version": "0.1.5"
 }
 
 },{}],21:[function(require,module,exports){
@@ -5471,6 +5471,7 @@ Document.prototype.register = function (options) {
     var url = this._buildUrl();
     return this.sendRequest('POST', url, {
         params: {register: ''},
+        headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(options)
     }).then(function (response) {
         self.setId(response.body.documentId);
@@ -5562,6 +5563,7 @@ Document.prototype.createFromBos = function (
     var self = this;
     return this.sendRequest('POST', url, {
         params: {source: 'bos'},
+        headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(body)
     }).then(function (response) {
         self.setId(response.body.documentId);
@@ -5624,6 +5626,7 @@ Notification.prototype.create = function (name, endpoint) {
     var self = this;
     var url = this._buildUrl();
     return self.sendRequest('POST', url, {
+        headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
             name: name,
             endpoint: endpoint
@@ -35565,6 +35568,7 @@ exports.createContext = Script.createContext = function (context) {
 };
 
 },{"126":126}],179:[function(require,module,exports){
+(function (Buffer){
 /**
  * Copyright (c) 2014 Baidu.com, Inc. All Rights Reserved
  *
@@ -35645,6 +35649,23 @@ var kDefaultOptions = {
 
     bos_token_mode: null,
 
+    // 因为使用 Form Post 的格式，没有设置额外的 Header，从而可以保证
+    // 使用 Flash 也能上传大文件
+    // 低版本浏览器上传文件的时候，需要设置 policy，默认情况下
+    // policy的内容只需要包含 expiration 和 conditions 即可
+    // policy: {
+    //   expiration: 'xx',
+    //   conditions: [
+    //     {bucket: 'the-bucket-name'}
+    //   ]
+    // }
+    bos_policy: null,
+
+    // 低版本浏览器上传文件的时候，需要设置 policy_signature
+    // 如果没有设置 bos_policy_signature 的话，会通过 uptoken_url 来请求
+    // 默认只会请求一次，如果失效了，需要手动来重置 policy_signature
+    bos_policy_signature: null,
+
     // JSONP 默认的超时时间(5000ms)
     uptoken_jsonp_timeout: 5000
 };
@@ -35665,6 +35686,7 @@ var kFileUploaded = 'FileUploaded';
 var kUploadPartProgress = 'UploadPartProgress';
 var kChunkUploaded = 'ChunkUploaded';
 var kUploadResume = 'UploadResume'; // 断点续传
+var kUploadPause = 'UploadPause';   // 暂停
 var kUploadResumeError = 'UploadResumeError'; // 尝试断点续传失败
 
 var kError = 'Error';
@@ -35673,6 +35695,7 @@ var kUploadComplete = 'UploadComplete';
 // 预先定义几种签名的策略
 var TokenMode = {
     DEFAULT: 'default',
+    POLICY: 'policy',
     STS: 'sts'
 };
 
@@ -35691,7 +35714,9 @@ function Uploader(options) {
         }, $(options).data());
     }
 
-    var runtimeOptions = {};
+    var runtimeOptions = {
+        bos_policy: utils.getDefaultPolicy(options.bos_bucket)
+    };
     this.options = u.extend({}, kDefaultOptions, runtimeOptions, options);
     this.options.max_file_size = utils.parseSize(this.options.max_file_size);
     this.options.bos_multipart_min_size
@@ -35862,44 +35887,54 @@ Uploader.prototype._init = function () {
         fileInput.init();
     }
 
-    if (options.bos_token_mode === TokenMode.STS) {
-        // 切换到了 STS 的模式
-        this._initStsToken()
-            .then(function (payload) {
-                if (payload) {
-                    // 重新初始化一个 sdk.BosClient
-                    self.client = new sdk.BosClient({
-                        endpoint: utils.normalizeEndpoint(options.bos_endpoint),
-                        credentials: {
-                            ak: payload.AccessKeyId,
-                            sk: payload.SecretAccessKey
-                        },
-                        sessionToken: payload.SessionToken
-                    });
-                    self.client.createSignature = function (_, httpMethod, path, params, headers) {
-                        var credentials = _ || this.config.credentials;
-                        return sdk.Q.fcall(function () {
-                            var auth = new sdk.Auth(credentials.ak, credentials.sk);
-                            return auth.generateAuthorization(httpMethod, path, params, headers);
-                        });
-                    };
-                }
-                self._initEvents();
-                self._invoke(kPostInit);
-            })[
-            "catch"](function (error) {
-                debug(error);
-                self._invoke(kError, [error]);
+    var promise = null;
+    if (options.bos_token_mode === TokenMode.POLICY) {
+        if (options.bos_policy && options.bos_credentials) {
+            promise = sdk.Q.fcall(function () {
+                var credentials = options.bos_credentials;
+                var auth = new sdk.Auth(credentials.ak, credentials.sk);
+                options.bos_policy_base64 = new Buffer(JSON.stringify(options.bos_policy)).toString('base64');
+                options.bos_policy_signature = auth.hash(options.bos_policy_base64, credentials.sk);
+                options.bos_ak = credentials.ak;
             });
+        }
+        else {
+            promise = self._initPolicySignature().then(function (payload) {
+                if (payload) {
+                    options.bos_policy_base64 = payload.policy;
+                    options.bos_policy_signature = payload.signature;
+                    options.bos_ak = payload.accessKey;
+                }
+            });
+        }
     }
-    else {
+    else if (options.bos_token_mode === TokenMode.STS) {
+        // 切换到了 STS 的模式
+        promise = this._initStsToken().then(function (payload) {
+            if (payload) {
+                // 重新初始化一个 sdk.BosClient
+                options.bos_credentials = {
+                    ak: payload.AccessKeyId,
+                    sk: payload.SecretAccessKey
+                };
+                options.uptoken = payload.SessionToken;
+                self.client = new sdk.BosClient({
+                    endpoint: utils.normalizeEndpoint(options.bos_endpoint),
+                    credentials: options.bos_credentials,
+                    sessionToken: options.uptoken
+                });
+            }
+        });
+    }
+
+    promise.then(function () {
         if (!options.bos_credentials && options.uptoken_url
             && options.get_new_uptoken === true) {
-            // 服务端动态签名的方式.
-            this.client.createSignature = this._getCustomizedSignature(options.uptoken_url);
+            // 服务端动态签名的方式
+            self.client.createSignature = self._getCustomizedSignature(options.uptoken_url);
         }
         else if (options.bos_credentials) {
-            this.client.createSignature = function (_, httpMethod, path, params, headers) {
+            self.client.createSignature = function (_, httpMethod, path, params, headers) {
                 var credentials = _ || this.config.credentials;
                 return sdk.Q.fcall(function () {
                     var auth = new sdk.Auth(credentials.ak, credentials.sk);
@@ -35907,9 +35942,65 @@ Uploader.prototype._init = function () {
                 });
             };
         }
-        this._initEvents();
-        this._invoke(kPostInit);
+
+        self._initEvents();
+        self._invoke(kPostInit);
+    })["catch"](function (error) {
+        debug(error);
+        self._invoke(kError, [error]);
+    });
+};
+
+Uploader.prototype._initPolicySignature = function () {
+    var options = this.options;
+    var bos_policy = options.bos_policy;
+    var bos_policy_signature = options.bos_policy_signature;
+    var uptoken_url = options.uptoken_url;
+    var timeout = options.uptoken_jsonp_timeout;
+
+    if (!bos_policy) {
+        // 如果没有设置 bos_policy，莫非因为 bucket 是 public-read-write?
+        // 因为默认情况下 bos_policy 是有内容设置的，所以如果出现不存在的情况
+        // 肯定是使用者显式的设置成 null 了
+        return sdk.Q.resolve();
     }
+
+    if (!bos_policy_signature) {
+        // 如果设置了 bos_policy 但是没有设置 bos_policy_signature
+        // 那么就动态的从后台请求一次
+        if (!uptoken_url) {
+            return sdk.Q.reject(new Error('In order to get policy signature, `uptoken_url` must be setted.'));
+        }
+
+        var deferred = sdk.Q.defer();
+        $.ajax({
+            url: uptoken_url,
+            jsonp: 'callback',
+            dataType: 'jsonp',
+            timeout: timeout,
+            data: {
+                policy: JSON.stringify(bos_policy)
+            },
+            success: function (payload) {
+                // payload.policy (base64)
+                // payload.signature
+                // payload.accessKey
+                deferred.resolve(payload);
+            },
+            error: function () {
+                deferred.reject(new Error('Get policy signature timeout (' + timeout + 'ms).'));
+            }
+        });
+        return deferred.promise;
+    }
+
+    // 不需要用户自己设置，主动计算一下就好了.
+    if (options.bos_policy_base64 == null) {
+        options.bos_policy_base64 = new Buffer(JSON.stringify(
+            bos_policy)).toString('base64');
+    }
+
+    return sdk.Q.resolve();
 };
 
 Uploader.prototype._initEvents = function () {
@@ -35936,6 +36027,9 @@ Uploader.prototype._initEvents = function () {
     this.client.on('progress', u.bind(this._onUploadProgress, this));
     // XXX 必须绑定 error 的处理函数，否则会 throw new Error
     this.client.on('error', u.bind(this._onError, this));
+
+    // $(window).on('online', u.bind(this._handleOnlineStatus, this));
+    // $(window).on('offline', u.bind(this._handleOfflineStatus, this));
 
     if (!this._xhr2Supported) {
         // 如果浏览器不支持 xhr2，那么就切换到 mOxie.XMLHttpRequest
@@ -36025,6 +36119,20 @@ Uploader.prototype._onFilesAdded = function (e) {
     }
 };
 
+Uploader.prototype._handleOnlineStatus = function (e) {
+    // var condition = navigator.onLine ? 'online' : 'offline';
+    if (navigator.onLine) {
+        this.resume();
+    }
+    else {
+        this.pause();
+    }
+};
+
+Uploader.prototype._handleOfflineStatus = function (e) {
+    this._handleOnlineStatus(e);
+};
+
 Uploader.prototype._onError = function (e) {
     debug(e);
     // this._invoke(kError, [e, this._currentFile]);
@@ -36061,6 +36169,27 @@ Uploader.prototype._onUploadProgress = function (e) {
     this._invoke(eventType, [this._currentFile, progress, e]);
 };
 
+Uploader.prototype.resume = function () {
+    this.start();
+    this._invoke(kUploadResume);
+};
+
+Uploader.prototype.pause = function () {
+    if (this.client._httpAgent && this.client._httpAgent._req) {
+        var req = this.client._httpAgent._req;
+        if (req.xhr) {
+            req.xhr.abort();
+        }
+    }
+
+    if (this._currentFile) {
+        this._files.unshift(this._currentFile);
+    }
+
+    this.stop();
+    this._invoke(kUploadPause, [this._currentFile]);
+};
+
 Uploader.prototype.start = function () {
     if (this._working) {
         return;
@@ -36068,6 +36197,7 @@ Uploader.prototype.start = function () {
 
     if (this._files.length) {
         this._working = true;
+        this._abort = false;
         this._uploadNext();
     }
 };
@@ -36090,6 +36220,10 @@ Uploader.prototype._guessTokenMode = function () {
     var options = this.options;
     if (options.bos_token_mode) {
         return options.bos_token_mode;
+    }
+
+    if (!this._xhr2Supported) {
+        return TokenMode.POLICY;
     }
 
     if (options.uptoken_url && options.get_new_uptoken === false) {
@@ -36115,6 +36249,85 @@ Uploader.prototype._guessContentType = function (file, opt_ignoreCharset) {
 
     return contentType;
 };
+
+Uploader.prototype._uploadNextViaPostObject = function (file, bucket, object) {
+    var self = this;
+    var options = this.options;
+    var config = this.client.config;
+    var url = config.endpoint.replace(/^(https?:\/\/)/, '$1' + bucket + '.');
+    var fields = {
+        'Content-Type': self._guessContentType(file, true),
+        'key': object,
+        'policy': options.bos_policy_base64,
+        'signature': options.bos_policy_signature,
+        'accessKey': options.bos_ak,
+        'success-action-status': '201'
+    };
+
+    return this._sendPostRequest(url, fields, file)
+        .then(function (response) {
+            response.body.bucket = bucket;
+            response.body.object = object;
+            self._invoke(kFileUploaded, [file, response]);
+        })[
+        "catch"](function (error) {
+            debug(error);
+            self._invoke(kError, [error, file]);
+        })
+        .fin(function () {
+            return self._uploadNext();
+        });
+};
+
+Uploader.prototype._sendPostRequest = function (url, fields, file) {
+    var self = this;
+    var deferred = sdk.Q.defer();
+
+    if (u.isUndefined(mOxie)
+        || !u.isFunction(mOxie.FormData)
+        || !u.isFunction(mOxie.XMLHttpRequest)) {
+        return sdk.Q.reject(new Error('mOxie is undefined.'));
+    }
+
+    var formData = new mOxie.FormData();
+    u.each(fields, function (value, name) {
+        if (value == null) {
+            return;
+        }
+        formData.append(name, value);
+    });
+    formData.append('file', file);
+
+    var xhr = new mOxie.XMLHttpRequest();
+    xhr.onload = function (e) {
+        if (xhr.status >= 200 && xhr.status < 300) {
+            deferred.resolve({
+                http_headers: {},
+                body: {}
+            });
+        }
+        else {
+            deferred.reject(new Error('Invalid response statusCode ' + xhr.status));
+        }
+    };
+    xhr.onerror = function (error) {
+        deferred.reject(error);
+    };
+    if (xhr.upload) {
+        xhr.upload.onprogress = function (e) {
+            var progress = e.loaded / e.total;
+            self._invoke(kUploadProgress, [file, progress, null]);
+        };
+    }
+    xhr.open('POST', url, true);
+    xhr.send(formData, {
+        runtime_order: 'flash',
+        swf_url: self.options.flash_swf_url
+    });
+
+    return deferred.promise;
+};
+
 
 Uploader.prototype._uploadNextViaMultipart = function (file, bucket, object) {
     var contentType = this._guessContentType(file);
@@ -36426,8 +36639,13 @@ Uploader.prototype._uploadPart = function (state) {
 };
 
 Uploader.prototype._uploadNext = function (opt_maxRetries) {
+    if (this._abort) {
+        this._working = false;
+        return;
+    }
+
     var file = this._getNext();
-    if (file == null || this._abort) {
+    if (file == null) {
         // 自动结束了 或者 人为结束了
         this._working = false;
         this._invoke(kUploadComplete);
@@ -36456,6 +36674,10 @@ Uploader.prototype._uploadNext = function (opt_maxRetries) {
             else if (u.isObject(result)) {
                 bucket = result.bucket || bucket;
                 object = result.key || object;
+            }
+
+            if (!self._xhr2Supported) {
+                return self._uploadNextViaPostObject(file, bucket, object);
             }
 
             if (options.bos_appendable === true) {
@@ -36602,10 +36824,17 @@ Uploader.prototype._uploadNextViaPutObject = function (file, bucket, object, opt
                 // 应该是正常的错误（比如签名异常），这种情况就不要重试了
                 return self._uploadNext();
             }
+            // else if (error.status_code === 0) {
+            //    // 可能是断网了，safari 触发 online/offline 延迟比较久
+            //    // 我们推迟一下 self._uploadNext() 的时机
+            //    self.pause();
+            //    return;
+            // }
             else if (maxRetries > 0) {
                 // 还有几乎重试
                 return self._uploadNextViaPutObject(file, bucket, object, maxRetries - 1);
             }
+
             // 重试结束了，不管了，继续下一个文件的上传
             return self._uploadNext();
         });
@@ -36613,7 +36842,8 @@ Uploader.prototype._uploadNextViaPutObject = function (file, bucket, object, opt
 
 module.exports = Uploader;
 
-},{"17":17,"174":174,"180":180,"19":19,"84":84}],180:[function(require,module,exports){
+}).call(this,require(74).Buffer)
+},{"17":17,"174":174,"180":180,"19":19,"74":74,"84":84}],180:[function(require,module,exports){
 /**
  * Copyright (c) 2014 Baidu.com, Inc. All Rights Reserved
  *
@@ -36844,6 +37074,25 @@ exports.md5sum = function (file) {
     loadNext();
 
     return deferred.promise;
+};
+
+exports.getDefaultPolicy = function (bucket) {
+    if (bucket == null) {
+        return null;
+    }
+
+    var now = new Date().getTime();
+
+    // 默认是 24小时 之后到期
+    var expiration = new Date(now + 24 * 60 * 60 * 1000);
+    var utcDateTime = expiration.toISOString().replace(/\.\d+Z$/, 'Z');
+
+    return {
+        expiration: utcDateTime,
+        conditions: [
+            {bucket: bucket}
+        ]
+    };
 };
 
 /**
