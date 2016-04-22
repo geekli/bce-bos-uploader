@@ -16,11 +16,17 @@ function toUrl(object) {
   return url;
 }
 
-var AK = getQuery('ak', 'f1a2705d3cf8448cb917684c4f40ac1f');
-var SK = getQuery('sk', '5fd876eb57834c2f8156d8e65890d0fd');
-var DOC_ENDPOINT = getQuery('doc.endpoint', 'http://doc.bce-testinternal.baidu.com');
-var BOS_ENDPOINT = getQuery('bos.endpoint', 'http://bos.qasandbox.bcetest.baidu.com');
-var BOS_BUCKET = getQuery('bos.bucket', 'bkt-gavfz4jzhjtq0y4c');
+// var AK = getQuery('ak', 'f1a2705d3cf8448cb917684c4f40ac1f');
+// var SK = getQuery('sk', '5fd876eb57834c2f8156d8e65890d0fd');
+// var DOC_ENDPOINT = getQuery('doc.endpoint', 'http://doc.bce-testinternal.baidu.com');
+// var BOS_ENDPOINT = getQuery('bos.endpoint', 'http://bos.qasandbox.bcetest.baidu.com');
+// var BOS_BUCKET = getQuery('bos.bucket', 'bkt-gavfz4jzhjtq0y4c');
+
+var AK = getQuery('ak', 'afe4759592064eee930682e399249aba');
+var SK = getQuery('sk', '7785ea912b06449f8cbd084998a1e400');
+var DOC_ENDPOINT = getQuery('doc.endpoint', 'http://doc.baidubce.com');
+var BOS_ENDPOINT = getQuery('bos.endpoint', 'http://bos.bj.baidubce.com');
+var BOS_BUCKET = getQuery('bos.bucket', 'bkt-gawizxekph7vrnmb');
 var CHUNK_SIZE = '1m';
 
 var doc = new baidubce.sdk.DocClient.Document({

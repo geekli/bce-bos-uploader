@@ -164,15 +164,8 @@
       uptoken_url: 'http://180.76.133.248:1337/ack',
       bos_token_mode: 'sts',
       auto_start: false,
-      max_retries: 2,
       max_file_size: '1Gb',
-      bos_multipart_min_size: '10m',
-      bos_multipart_parallel: 1,
-      chunk_size: '1m',
-      dir_selection: false,
       flash_swf_url: 'bower_components/moxie/bin/flash/Moxie.swf',
-      // accept: 'zip,rar,pdf,avi',
-      // bos_multipart_local_key_generator: 'md5',
       init: {
         FilesFilter: function (_, files) {
           // 添加更多的过滤规则，比如文件大小之类的
