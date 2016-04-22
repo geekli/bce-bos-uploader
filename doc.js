@@ -54,7 +54,7 @@ var uploader = new baidubce.bos.Uploader({
   chunk_size: CHUNK_SIZE,
   dir_selection: false,
   accept: 'txt,pdf,doc,docx,ppt,pptx,xls,xlsx',
-  flash_swf_url: '../bower_components/moxie/bin/flash/Moxie.swf',
+  flash_swf_url: 'bower_components/moxie/bin/flash/Moxie.swf',
   init: {
     FilesFilter: function (_, files) {
       // 添加更多的过滤规则，比如文件大小之类的
