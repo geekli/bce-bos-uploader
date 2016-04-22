@@ -76,8 +76,6 @@ var kDefaultOptions = {
     // 是否需要每次都去服务器计算签名
     get_new_uptoken: true,
 
-    bos_token_mode: null,
-
     // 因为使用 Form Post 的格式，没有设置额外的 Header，从而可以保证
     // 使用 Flash 也能上传大文件
     // 低版本浏览器上传文件的时候，需要设置 policy，默认情况下
@@ -152,10 +150,6 @@ function Uploader(options) {
         = utils.parseSize(this.options.bos_multipart_min_size);
     this.options.chunk_size = this._resetChunkSize(
         utils.parseSize(this.options.chunk_size));
-
-    if (!this.options.bos_token_mode) {
-        this.options.bos_token_mode = this._guessTokenMode();
-    }
 
     var credentials = this.options.bos_credentials;
     if (!credentials && this.options.bos_ak && this.options.bos_sk) {
@@ -316,8 +310,8 @@ Uploader.prototype._init = function () {
         fileInput.init();
     }
 
-    var promise = null;
-    if (options.bos_token_mode === TokenMode.POLICY) {
+    var promise = sdk.Q.resolve();
+    if (!self._xhr2Supported) {
         if (options.bos_policy && options.bos_credentials) {
             promise = sdk.Q.fcall(function () {
                 var credentials = options.bos_credentials;
@@ -337,32 +331,30 @@ Uploader.prototype._init = function () {
             });
         }
     }
-    else if (options.bos_token_mode === TokenMode.STS) {
-        // 切换到了 STS 的模式
-        promise = this._initStsToken().then(function (payload) {
-            if (payload) {
-                // 重新初始化一个 sdk.BosClient
-                options.bos_credentials = {
-                    ak: payload.AccessKeyId,
-                    sk: payload.SecretAccessKey
-                };
-                options.uptoken = payload.SessionToken;
-                self.client = new sdk.BosClient({
-                    endpoint: utils.normalizeEndpoint(options.bos_endpoint),
-                    credentials: options.bos_credentials,
-                    sessionToken: options.uptoken
-                });
-            }
-        });
-    }
 
     promise.then(function () {
-        if (!options.bos_credentials && options.uptoken_url
-            && options.get_new_uptoken === true) {
-            // 服务端动态签名的方式
-            self.client.createSignature = self._getCustomizedSignature(options.uptoken_url);
+        if (self._xhr2Supported
+            && !options.bos_credentials
+            && options.uptoken_url
+            && options.get_new_uptoken === false) {
+            return self._initStsToken();
         }
-        else if (options.bos_credentials) {
+    }).then(function (payload) {
+        if (payload) {
+            // 重新初始化一个 sdk.BosClient
+            options.bos_credentials = {
+                ak: payload.AccessKeyId,
+                sk: payload.SecretAccessKey
+            };
+            options.uptoken = payload.SessionToken;
+            self.client = new sdk.BosClient({
+                endpoint: utils.normalizeEndpoint(options.bos_endpoint),
+                credentials: options.bos_credentials,
+                sessionToken: options.uptoken
+            });
+        }
+    }).then(function () {
+        if (options.bos_credentials) {
             self.client.createSignature = function (_, httpMethod, path, params, headers) {
                 var credentials = _ || this.config.credentials;
                 return sdk.Q.fcall(function () {
@@ -371,7 +363,10 @@ Uploader.prototype._init = function () {
                 });
             };
         }
-
+        else if (options.uptoken_url && options.get_new_uptoken === true) {
+            // 服务端动态签名的方式
+            self.client.createSignature = self._getCustomizedSignature(options.uptoken_url);
+        }
         self._initEvents();
         self._invoke(kPostInit);
     }).catch(function (error) {
@@ -643,23 +638,6 @@ Uploader.prototype.stop = function () {
  */
 Uploader.prototype._getNext = function () {
     return this._files.shift();
-};
-
-Uploader.prototype._guessTokenMode = function () {
-    var options = this.options;
-    if (options.bos_token_mode) {
-        return options.bos_token_mode;
-    }
-
-    if (!this._xhr2Supported) {
-        return TokenMode.POLICY;
-    }
-
-    if (options.uptoken_url && options.get_new_uptoken === false) {
-        return TokenMode.STS;
-    }
-
-    return TokenMode.DEFAULT;
 };
 
 Uploader.prototype._guessContentType = function (file, opt_ignoreCharset) {
