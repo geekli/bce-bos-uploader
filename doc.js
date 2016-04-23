@@ -111,7 +111,7 @@ var uploader = new baidubce.bos.Uploader({
       $('.network-speed').html(html);
     },
     UploadComplete: function () {
-      $('button[type=submit]').attr('disabled', false);
+      $('button[type=submit]').attr('disabled', true);
     },
     ListParts: function (_, file, uploadId) {
       // 恢复断点续传的时候，从本地获取 parts 的信息，避免从服务读取
