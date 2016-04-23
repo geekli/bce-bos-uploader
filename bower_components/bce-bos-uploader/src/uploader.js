@@ -25,7 +25,7 @@ var tracker = require('./tracker');
 var kDefaultOptions = {
     runtimes: 'html5',
 
-    // bos服务器的地址，默认（http://bos.bj.baidubce.com）
+    // bos服务器的地址，默认(http://bos.bj.baidubce.com)
     bos_endpoint: 'http://bos.bj.baidubce.com',
 
     // 默认的 ak 和 sk 配置
@@ -40,31 +40,34 @@ var kDefaultOptions = {
     // 格式转化一下
     bos_relay_server: 'https://relay.efe.tech',
 
-    // 是否支持多选，默认（false）
+    // 是否支持多选，默认(false)
     multi_selection: false,
 
-    // 失败之后重试的次数（单个文件或者分片），默认（0），不重试
+    // 失败之后重试的次数(单个文件或者分片)，默认(0)，不重试
     max_retries: 0,
 
-    // 是否自动上传，默认（false）
+    // 是否自动上传，默认(false)
     auto_start: false,
 
-    // 最大可以选择的文件大小，默认（100M）
+    // 最大可以选择的文件大小，默认(100M)
     max_file_size: '100mb',
 
-    // 超过这个文件大小之后，开始使用分片上传，默认（10M）
+    // 超过这个文件大小之后，开始使用分片上传，默认(10M)
     bos_multipart_min_size: '10mb',
 
-    // 分片上传的时候，并行上传的个数，默认（1）
+    // 分片上传的时候，并行上传的个数，默认(1)
     bos_multipart_parallel: 1,
+
+    // 队列中的文件，并行上传的个数，默认(3)
+    bos_task_parallel: 3,
 
     // 计算签名的时候，有些 header 需要剔除，减少传输的体积
     auth_stripped_headers: ['User-Agent', 'Connection'],
 
-    // 分片上传的时候，每个分片的大小，默认（4M）
+    // 分片上传的时候，每个分片的大小，默认(4M)
     chunk_size: '4mb',
 
-    // 分块上传时,是否允许断点续传，默认（true）
+    // 分块上传时,是否允许断点续传，默认(true)
     bos_multipart_auto_continue: true,
 
     // 分开上传的时候，localStorage里面key的生成方式，默认是 `default`
@@ -110,7 +113,7 @@ var kListParts = 'ListParts';
 var kFileFiltered = 'FileFiltered';
 var kFilesAdded = 'FilesAdded';
 var kFilesFilter = 'FilesFilter';
-
+var kNetworkSpeed = 'NetworkSpeed';
 var kBeforeUpload = 'BeforeUpload';
 // var kUploadFile     = 'UploadFile';       // ??
 var kUploadProgress = 'UploadProgress';
@@ -173,16 +176,28 @@ function Uploader(options) {
     this._files = [];
 
     /**
-     * FIXME(leeight) 当前正在上传的文件.
-     * @type {File}
-     */
-    this._currentFile = null;
-
-    /**
      * 是否被中断了，比如 this.stop
      * @type {boolean}
      */
     this._abort = false;
+
+    /**
+     * 记录从 start 开始已经上传的字节数.
+     * @type {number}
+     */
+    this._loadedBytes = 0;
+
+    /**
+     * 记录队列中总文件的大小.
+     * @type {number}
+     */
+    this._totalBytes = 0;
+
+    /**
+     * 记录开始上传的时间.
+     * @type {number}
+     */
+    this._startTime = 0;
 
     /**
      * 是否处于上传的过程中，也就是正在处理 this._files 队列的内容.
@@ -544,81 +559,54 @@ Uploader.prototype._onFilesAdded = function (e) {
     }
 };
 
-/*
-Uploader.prototype._handleOnlineStatus = function (e) {
-    // var condition = navigator.onLine ? 'online' : 'offline';
-    if (navigator.onLine) {
-        this.resume();
-    }
-    else {
-        this.pause();
-    }
-};
-
-Uploader.prototype._handleOfflineStatus = function (e) {
-    this._handleOnlineStatus(e);
-};
-*/
-
 Uploader.prototype._onError = function (e) {
     debug(e);
 };
 
-Uploader.prototype._onUploadProgress = function (e) {
+/**
+ * 处理上传进度的回掉函数.
+ * 1. 这里要区分文件的上传还是分片的上传，分片的上传是通过 partNumber 和 uploadId 的组合来判断的
+ * 2. IE6,7,8,9下面，是不需要考虑的，因为不会触发这个事件，而是直接在 _sendPostRequest 触发 kUploadProgress 了
+ * 3. 其它情况下，我们判断一下 Request Body 的类型是否是 Blob，从而避免对于其它类型的请求，触发 kUploadProgress
+ *    例如：HEAD，GET，POST(InitMultipart) 的时候，是没必要触发 kUploadProgress 的
+ *
+ * @param {Object} e  Progress Event 对象.
+ * @param {Object} httpContext sendHTTPRequest 的参数
+ */
+Uploader.prototype._onUploadProgress = function (e, httpContext) {
+    var args = httpContext.args;
+    var file = args.body;
+
+    if (!utils.isBlob(file)) {
+        return;
+    }
+
     var progress = e.lengthComputable
         ? e.loaded / e.total
         : 0;
 
-    // FIXME(leeight) 这种判断方法不太合适.
+    this._loadedBytes += (e.loaded - file._previousLoaded);
+    this._invoke(kNetworkSpeed, [
+        this._loadedBytes,
+        utils.now() - this._startTime,
+        this._totalBytes - this._loadedBytes
+    ]);
+    file._previousLoaded = e.loaded;
 
     var eventType = kUploadProgress;
-    if (e._partNumber != null) {
+    if (args.params.partNumber && args.params.uploadId) {
+        // IE6,7,8,9下面不会有partNumber和uploadId
+        // 此时的 file 是 slice 的结果，可能没有自定义的属性
+        // 比如 demo 里面的 __id, __mediaId 之类的
         eventType = kUploadPartProgress;
     }
-    else if (this.client._httpAgent
-        && this.client._httpAgent._req) {
-        var req = this.client._httpAgent._req;
-        var uri = req.uri;
 
-        if (/[\?&]append=?&?/.test(uri)) {
-            // 这里就不要触发 kUploadProgress 了
-            return;
-        }
-
-        var headers = req._headers;
-        var partNumber = headers['x-bce-meta-part-number'];
-        if (partNumber != null) {
-            eventType = kUploadPartProgress;
-        }
-    }
-
-    this._invoke(eventType, [this._currentFile, progress, e]);
+    this._invoke(eventType, [file, progress, e]);
 };
-
-/*
-Uploader.prototype.resume = function () {
-    this.start();
-    this._invoke(kUploadResume);
-};
-
-Uploader.prototype.pause = function () {
-    if (this.client._httpAgent && this.client._httpAgent._req) {
-        var req = this.client._httpAgent._req;
-        if (req.xhr) {
-            req.xhr.abort();
-        }
-    }
-
-    if (this._currentFile) {
-        this._files.unshift(this._currentFile);
-    }
-
-    this.stop();
-    this._invoke(kUploadPause, [this._currentFile]);
-};
-*/
 
 Uploader.prototype.start = function () {
+    var self = this;
+
     if (this._working) {
         return;
     }
@@ -626,7 +614,25 @@ Uploader.prototype.start = function () {
     if (this._files.length) {
         this._working = true;
         this._abort = false;
-        this._uploadNext();
+        this._startTime = utils.now();
+        this._loadedBytes = 0;
+        this._totalBytes = u.reduce(this._files, function (previous, item) {
+            return previous + item.size;
+        }, 0);
+
+        var taskParallel = this.options.bos_task_parallel;
+        async.eachLimit(this._files, taskParallel,
+            function (file, callback) {
+                file._previousLoaded = 0;
+                self._uploadNext(file).fin(function () {
+                    callback(null, file);
+                });
+            },
+            function (error) {
+                self._working = false;
+                self._files.length = 0;
+                self._invoke(kUploadComplete);
+            });
     }
 };
 
@@ -684,9 +690,6 @@ Uploader.prototype._uploadNextViaPostObject = function (file, bucket, object) {
         .catch(function (error) {
             debug(error);
             self._invoke(kError, [error, file]);
-        })
-        .fin(function () {
-            return self._uploadNext();
         });
 };
 
@@ -727,6 +730,13 @@ Uploader.prototype._sendPostRequest = function (url, fields, file) {
     if (xhr.upload) {
         xhr.upload.onprogress = function (e) {
             var progress = e.loaded / e.total;
+            self._loadedBytes += (e.loaded - file._previousLoaded);
+            file._previousLoaded = e.loaded;
+            self._invoke(kNetworkSpeed, [
+                self._loadedBytes,
+                utils.now() - self._startTime,
+                self._totalBytes - self._loadedBytes
+            ]);
             self._invoke(kUploadProgress, [file, progress, null]);
         };
     }
@@ -840,10 +850,6 @@ Uploader.prototype._uploadNextViaMultipart = function (file, bucket, object) {
         })
         .catch(function (error) {
             self._invoke(kError, [error, file]);
-        })
-        .fin(function () {
-            // 上传结束（成功/失败），开始下一个
-            return self._uploadNext();
         });
 };
 
@@ -993,11 +999,9 @@ Uploader.prototype._uploadPart = function (state) {
             : opt_maxRetries;
 
         var blob = item.file.slice(item.start, item.stop + 1);
-        var options = {
-            'x-bce-meta-part-number': item.partNumber
-        };
+        blob._previousLoaded = 0;
         return self.client.uploadPartFromBlob(item.bucket, item.object, item.uploadId,
-            item.partNumber, item.partSize, blob, options)
+            item.partNumber, item.partSize, blob)
             .then(function (response) {
                 ++state.loaded;
                 var progress = state.loaded / state.total;
@@ -1049,27 +1053,16 @@ Uploader.prototype._uploadPart = function (state) {
     };
 };
 
-Uploader.prototype._uploadNext = function (opt_maxRetries) {
+Uploader.prototype._uploadNext = function (file) {
     if (this._abort) {
         this._working = false;
-        return;
-    }
-
-    var file = this._getNext();
-    if (file == null) {
-        // 自动结束了 或者 人为结束了
-        this._working = false;
-        this._invoke(kUploadComplete);
-        return;
+        return sdk.Q.resolve();
     }
 
     var returnValue = this._invoke(kBeforeUpload, [file]);
     if (returnValue === false) {
-        return this._uploadNext();
+        return sdk.Q.resolve();
     }
-
-    // 设置一下当前正在上传的文件，progress 事件需要用到
-    this._currentFile = file;
 
     var self = this;
     var options = this.options;
@@ -1130,21 +1123,21 @@ Uploader.prototype._uploadNextViaAppendObject = function (file, bucket, object) 
     var options = this.options;
     var contentType = this._guessContentType(file);
 
-    this._getObjectMetadata(bucket, object)
+    return this._getObjectMetadata(bucket, object)
         .then(function (response) {
             var httpHeaders = response.http_headers;
             var appendable = utils.isAppendable(httpHeaders);
             if (!appendable) {
                 // Normal Object 不能切换为 Appendable Object
                 self._invoke(kUploadProgress, [file, 1, null]);
-                return self._uploadNext();
+                return sdk.Q.resolve();
             }
 
             var contentLength = +(httpHeaders['content-length']);
             if (contentLength >= file.size) {
                 // 服务端的文件不小于本地，就没必要上传了
                 self._invoke(kUploadProgress, [file, 1, null]);
-                return self._uploadNext();
+                return sdk.Q.resolve();
             }
 
             // offset 和 content-length 应该是一样大小的吧？
@@ -1199,11 +1192,10 @@ Uploader.prototype._uploadNextViaAppendObject = function (file, bucket, object) 
                 }
             };
             self._invoke(kFileUploaded, [file, response]);
-            return self._uploadNext();
         })
         .catch(function (error) {
             self._invoke(kError, [error, file]);
-            return self._uploadNext();
+            return sdk.Q.resolve();
         });
 };
 
@@ -1225,15 +1217,12 @@ Uploader.prototype._uploadNextViaPutObject = function (file, bucket, object, opt
             response.body.bucket = bucket;
             response.body.object = object;
             self._invoke(kFileUploaded, [file, response]);
-
-            // 上传成功，开始下一个
-            return self._uploadNext();
         })
         .catch(function (error) {
             self._invoke(kError, [error, file]);
             if (error.status_code && error.code && error.request_id) {
-                // 应该是正常的错误（比如签名异常），这种情况就不要重试了
-                return self._uploadNext();
+                // 应该是正常的错误(比如签名异常)，这种情况就不要重试了
+                return sdk.Q.resolve();
             }
             // else if (error.status_code === 0) {
             //    // 可能是断网了，safari 触发 online/offline 延迟比较久
@@ -1247,7 +1236,7 @@ Uploader.prototype._uploadNextViaPutObject = function (file, bucket, object, opt
             }
 
             // 重试结束了，不管了，继续下一个文件的上传
-            return self._uploadNext();
+            return sdk.Q.resolve();
         });
 };
 

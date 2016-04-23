@@ -1,0 +1,22 @@
+{
+  "name": "bce-bos-uploader-demo",
+  "description": "",
+  "main": "index.js",
+  "authors": [
+    "leeight <leeight@gmail.com>"
+  ],
+  "license": "ISC",
+  "homepage": "",
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests"
+  ],
+  "dependencies": {
+    "bce-bos-uploader": "^1.2.0",
+    "bootstrap": "^3.3.6",
+    "humanize": "^0.0.9"
+  }
+}

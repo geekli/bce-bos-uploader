@@ -379,6 +379,49 @@ exports.transformUrl = function (url) {
     });
 };
 
+exports.isBlob = function (body) {
+    var blobCtor = null;
+
+    if (u.isFunction(Blob)) {
+        blobCtor = Blob;
+    }
+    else if (!u.isUndefined(mOxie) && u.isFunction(mOxie.Blob)) {
+        blobCtor = mOxie.Blob;
+    }
+    else {
+        return false;
+    }
+
+    return body instanceof blobCtor;
+};
+
+exports.now = function () {
+    return new Date().getTime();
+};
+
+exports.toDHMS = function (seconds) {
+    var days = 0;
+    var hours = 0;
+    var minutes = 0;
+
+    if (seconds >= 60) {
+        minutes = ~~(seconds / 60);
+        seconds = seconds - minutes * 60;
+    }
+
+    if (minutes >= 60) {
+        hours = ~~(minutes / 60);
+        minutes = minutes - hours * 60;
+    }
+
+    if (hours >= 24) {
+        days = ~~(hours / 24);
+        hours = hours - days * 24;
+    }
+
+    return {DD: days, HH: hours, MM: minutes, SS: seconds};
+};
+
 exports.fixXhr = function (options, isBos) {
     return function (httpMethod, resource, args, config) {
         var client = this;
@@ -474,11 +517,17 @@ exports.fixXhr = function (options, isBos) {
                 if (originalHttpMethod === 'PUT') {
                     // POST, HEAD, GET 之类的不需要触发 progress 事件
                     // 否则导致页面的逻辑混乱
-                    var partNumber = args.headers['x-bce-meta-part-number'];
                     e.lengthComputable = true;
-                    e._partNumber = partNumber;
 
-                    client.emit('progress', e);
+                    var httpContext = {
+                        httpMethod: originalHttpMethod,
+                        resource: resource,
+                        args: args,
+                        config: config,
+                        xhr: xhr
+                    };
+
+                    client.emit('progress', e, httpContext);
                 }
             };
         }

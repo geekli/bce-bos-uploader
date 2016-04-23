@@ -69,6 +69,7 @@
                 <input type="file" id="file" />
               </span>
               <button type="submit" class="btn btn-success" disabled>开始上传</button>
+              <span class="network-speed"></span>
             </div>
           </form>
           <br />
@@ -77,6 +78,7 @@
               <col width="50px" />
               <col width="50px" />
               <col width="80px" />
+              <col width="60px" />
               <col width="100px" />
             </colgroup>
             <thead>
@@ -85,12 +87,13 @@
                 <th>状态</th>
                 <th>进度</th>
                 <th>大小</th>
+                <th>耗时(s)</th>
                 <th>文件名</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td colspan="5" class="empty">请选择文件...</td>
+                <td colspan="6" class="empty">请选择文件...</td>
               </tr>
             </tbody>
           </table>
@@ -98,7 +101,7 @@
       </div>
     </div>
     <script>
-    var __id = 0;
+    var __uuid = 0;
     var __isEmpty = true;
 
     function noop() {
@@ -118,7 +121,7 @@
     }
 
     function getIdByName(name) {
-      return 'f' + (__id ++);
+      return 'f' + (__uuid ++);
     }
 
     function getRowById(rowId) {
@@ -144,6 +147,10 @@
             container.css('color', 'red');
           }
         },
+        setTime: function (time) {
+          var container = $('#' + rowId + ' .f-time');
+          container.html(time);
+        },
         setUrl: function (url) {
           var container = $('#' + rowId + ' .f-name');
           var name = container.html();
@@ -163,7 +170,6 @@
       bos_bucket: 'bce-bos-uploader',
       uptoken_url: 'http://180.76.133.248:1337/ack',
       get_new_uptoken: false,
-      auto_start: false,
       max_file_size: '1Gb',
       flash_swf_url: 'bower_components/moxie/bin/flash/Moxie.swf',
       init: {
@@ -176,23 +182,25 @@
             var id = getIdByName(file.name);
             file.__id = id;
             var html = '<tr id="' + id + '">'
-                       + '<td class="f-id">' + (__id) + '</td>'
+                       + '<td class="f-id">' + (__uuid) + '</td>'
                        + '<td class="f-status"><span class="glyphicon glyphicon-record"></span></td>'
                        + '<td class="f-progress">0.00%</td>'
                        + '<td class="f-size">' + (humanize.filesize(file.size)) + '</td>'
+                       + '<td class="f-time">-</td>'
                        + '<td class="f-name">' + (file.name) + '</td>'
                        + '</tr>';
             if (__isEmpty) {
               __isEmpty = false;
               $('table tbody').html(html);
-              $('button[type=submit]').attr('disabled', false);
             }
             else {
               $('table tbody').append(html);
             }
+            $('button[type=submit]').attr('disabled', false);
           }
         },
         BeforeUpload: function (_, file) {
+          file.__startTime = new Date().getTime();
           var row = getRowById(file.__id);
           if (/\.(pdf)$/i.test(file.name)) {
             row.setIgnore(true);
@@ -226,25 +234,40 @@
           return deferred.promise;
         },
         FileUploaded: function (_, file, info) {
+          var time = ((new Date().getTime() - file.__startTime) / 1000).toFixed(2);
           var row = getRowById(file.__id);
           var url = toUrl(info.body.object);
           row.setStatus('ok-circle', true);
           row.setUrl(url);
+          row.setTime(time);
           localStorage.removeItem(file.__uploadId);
         },
+        NetworkSpeed: function (_, bytes, time, pendings) {
+          var speed = bytes / (time / 1000);
+          var html = '上传速度：' + humanize.filesize(speed) + '/s';
+          var seconds = pendings / speed;
+          if (seconds > 1) {
+            var dhms = baidubce.utils.toDHMS(Math.ceil(seconds));
+            html += '，剩余时间：' + [
+              humanize.pad(dhms.HH, 2, '0'),
+              humanize.pad(dhms.MM, 2, '0'),
+              humanize.pad(dhms.SS, 2, '0')
+            ].join(':');
+          }
+
+          $('.network-speed').html(html);
+        },
         UploadComplete: function () {
-          // TODO
+          $('button[type=submit]').attr('disabled', true);
         },
         ListParts: function (_, file, uploadId) {
           // 恢复断点续传的时候，从本地获取 parts 的信息，避免从服务读取
           // 有时候服务器没有开放读取的权限
-          var parts = localStorage.getItem(uploadId);
-          if (parts) {
-            try {
-              return JSON.parse(parts);
-            }
-            catch (ex) {
-            }
+          try {
+            var parts = localStorage.getItem(uploadId);
+            return JSON.parse(parts);
+          }
+          catch (ex) {
           }
         },
         ChunkUploaded: function (_, file, result) {
@@ -255,19 +278,22 @@
 
           file.__uploadId = uploadId;
 
-          var parts = localStorage.getItem(uploadId);
-          if (!parts) {
-            parts = [];
-          }
-          else {
-            parts = JSON.parse(parts);
-          }
-          parts.push({
-            partNumber: partNumber,
-            eTag: eTag
-          });
+          if (eTag) {
+            var parts = localStorage.getItem(uploadId);
+            if (!parts) {
+              parts = [];
+            }
+            else {
+              parts = JSON.parse(parts);
+            }
 
-          localStorage.setItem(uploadId, JSON.stringify(parts));
+            parts.push({
+              partNumber: partNumber,
+              eTag: eTag
+            });
+
+            localStorage.setItem(uploadId, JSON.stringify(parts));
+          }
           console.log(result);
         },
         Error: function (_, error, file) {
