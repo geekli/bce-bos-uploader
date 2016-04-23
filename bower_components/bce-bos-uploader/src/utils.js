@@ -374,10 +374,8 @@ exports.transformUrl = function (url) {
             // /v1/${bucket}/...
             return protocol + '//' + $4 + '.' + host + '/' + $3;
         }
-        else {
-            // /${bucket}/...
-            return protocol + '//' + $3 + '.' + host + '/' + $4;
-        }
+        // /${bucket}/...
+        return protocol + '//' + $3 + '.' + host + '/' + $4;
     });
 };
 

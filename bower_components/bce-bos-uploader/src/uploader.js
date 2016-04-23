@@ -20,6 +20,7 @@ var async = require('async');
 var debug = require('debug')('bce-bos-uploader');
 
 var utils = require('./utils');
+var tracker = require('./tracker');
 
 var kDefaultOptions = {
     runtimes: 'html5',
@@ -94,7 +95,11 @@ var kDefaultOptions = {
     bos_policy_signature: null,
 
     // JSONP 默认的超时时间(5000ms)
-    uptoken_jsonp_timeout: 5000
+    uptoken_jsonp_timeout: 5000,
+
+    // 是否要禁用统计，默认不禁用
+    // 如果需要禁用，把 tracker_id 设置成 null 即可
+    tracker_id: '2e0bc8c5e7ceb25796ba4962e7b57387'
 };
 
 var kPostInit = 'PostInit';
@@ -113,18 +118,10 @@ var kFileUploaded = 'FileUploaded';
 var kUploadPartProgress = 'UploadPartProgress';
 var kChunkUploaded = 'ChunkUploaded';
 var kUploadResume = 'UploadResume'; // 断点续传
-var kUploadPause = 'UploadPause';   // 暂停
+// var kUploadPause = 'UploadPause';   // 暂停
 var kUploadResumeError = 'UploadResumeError'; // 尝试断点续传失败
-
-var kError = 'Error';
 var kUploadComplete = 'UploadComplete';
-
-// 预先定义几种签名的策略
-var TokenMode = {
-    DEFAULT: 'default',
-    POLICY: 'policy',
-    STS: 'sts'
-};
+var kError = 'Error';
 
 /**
  * BCE BOS Uploader
@@ -230,7 +227,7 @@ Uploader.prototype._getCustomizedSignature = function (uptokenUrl) {
                 httpMethod: httpMethod,
                 path: path,
                 // delay: ~~(Math.random() * 10),
-                params: JSON.stringify(params || {}),
+                queries: JSON.stringify(params || {}),
                 headers: JSON.stringify(headers || {})
             },
             error: function () {
@@ -287,6 +284,10 @@ Uploader.prototype._invoke = function (methodName, args, throwErrors) {
 Uploader.prototype._init = function () {
     var options = this.options;
     var accept = options.accept;
+
+    if (options.tracker_id) {
+        tracker.init(options.tracker_id);
+    }
 
     var self = this;
     if (!this._xhr2Supported
@@ -543,6 +544,7 @@ Uploader.prototype._onFilesAdded = function (e) {
     }
 };
 
+/*
 Uploader.prototype._handleOnlineStatus = function (e) {
     // var condition = navigator.onLine ? 'online' : 'offline';
     if (navigator.onLine) {
@@ -556,10 +558,10 @@ Uploader.prototype._handleOnlineStatus = function (e) {
 Uploader.prototype._handleOfflineStatus = function (e) {
     this._handleOnlineStatus(e);
 };
+*/
 
 Uploader.prototype._onError = function (e) {
     debug(e);
-    // this._invoke(kError, [e, this._currentFile]);
 };
 
 Uploader.prototype._onUploadProgress = function (e) {
@@ -593,6 +595,7 @@ Uploader.prototype._onUploadProgress = function (e) {
     this._invoke(eventType, [this._currentFile, progress, e]);
 };
 
+/*
 Uploader.prototype.resume = function () {
     this.start();
     this._invoke(kUploadResume);
@@ -613,6 +616,7 @@ Uploader.prototype.pause = function () {
     this.stop();
     this._invoke(kUploadPause, [this._currentFile]);
 };
+*/
 
 Uploader.prototype.start = function () {
     if (this._working) {
@@ -886,7 +890,7 @@ Uploader.prototype._initiateMultipartUpload = function (file, chunkSize, bucket,
                 return initNewMultipartUpload();
             }
 
-            return self._listParts(bucket, object, uploadId);
+            return self._listParts(file, bucket, object, uploadId);
         })
         .then(function (response) {
             if (uploadId && localSaveKey) {
@@ -908,9 +912,9 @@ Uploader.prototype._initiateMultipartUpload = function (file, chunkSize, bucket,
         });
 };
 
-Uploader.prototype._listParts = function (bucket, object, uploadId) {
+Uploader.prototype._listParts = function (file, bucket, object, uploadId) {
     var self = this;
-    var localParts = this._invoke(kListParts, [this._currentFile, uploadId]);
+    var localParts = this._invoke(kListParts, [file, uploadId]);
 
     return sdk.Q.resolve(localParts)
         .then(function (parts) {
@@ -997,7 +1001,7 @@ Uploader.prototype._uploadPart = function (state) {
             .then(function (response) {
                 ++state.loaded;
                 var progress = state.loaded / state.total;
-                self._invoke(kUploadProgress, [self._currentFile, progress, null]);
+                self._invoke(kUploadProgress, [item.file, progress, null]);
 
                 var result = {
                     uploadId: item.uploadId,
@@ -1009,7 +1013,7 @@ Uploader.prototype._uploadPart = function (state) {
                     total: blob.size,
                     response: response
                 };
-                self._invoke(kChunkUploaded, [self._currentFile, result]);
+                self._invoke(kChunkUploaded, [item.file, result]);
 
                 return response;
             })
