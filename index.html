@@ -47,9 +47,16 @@
         padding: 0 5px;
         margin: 0;
     }
+    .table > tbody > tr > td.f-progress {
+        vertical-align: middle;
+    }
     tr.ignored {
-      text-decoration: line-through;
-      color: gray;
+        text-decoration: line-through;
+        color: gray;
+    }
+    .progress {
+        margin-bottom: 0;
+        height: 10px;
     }
     </style>
   </head>
@@ -77,7 +84,7 @@
             <colgroup>
               <col width="50px" />
               <col width="50px" />
-              <col width="80px" />
+              <col width="180px" />
               <col width="60px" />
               <col width="100px" />
             </colgroup>
@@ -135,7 +142,7 @@
           }
         },
         setProgress: function (progress) {
-          $('#' + rowId + ' .f-progress').html((progress * 100).toFixed(2) + '%');
+          $('#' + rowId + ' .f-progress .progress-bar').css('width', (progress * 100).toFixed(2) + '%');
         },
         setStatus: function (type, ok) {
           var container = $('#' + rowId + ' .f-status');
@@ -164,6 +171,17 @@
       };
     }
 
+    function getDefaultTextProgress() {
+      return '0.00%';
+    }
+
+    function getDefaultCssProgress() {
+      return '<div class="progress">' +
+             '  <div class="progress-bar progress-bar-success progress-bar-striped" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width: 0%">'
+             '  </div>' +
+             '</div>';
+    }
+
     var uploader = new baidubce.bos.Uploader({
       browse_button: '#file',
       multi_selection: true,
@@ -184,7 +202,7 @@
             var html = '<tr id="' + id + '">'
                        + '<td class="f-id">' + (__uuid) + '</td>'
                        + '<td class="f-status"><span class="glyphicon glyphicon-record"></span></td>'
-                       + '<td class="f-progress">0.00%</td>'
+                       + '<td class="f-progress">' + getDefaultCssProgress() + '</td>'
                        + '<td class="f-size">' + (humanize.filesize(file.size)) + '</td>'
                        + '<td class="f-time">-</td>'
                        + '<td class="f-name">' + (file.name) + '</td>'
