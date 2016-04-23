@@ -382,10 +382,12 @@ exports.transformUrl = function (url) {
 exports.isBlob = function (body) {
     var blobCtor = null;
 
-    if (u.isFunction(Blob)) {
+    if (typeof Blob !== 'undefined') {
+        // Chrome Blob === 'function'
+        // Safari Blob === 'undefined'
         blobCtor = Blob;
     }
-    else if (!u.isUndefined(mOxie) && u.isFunction(mOxie.Blob)) {
+    else if (typeof mOxie !== 'undefined' && u.isFunction(mOxie.Blob)) {
         blobCtor = mOxie.Blob;
     }
     else {

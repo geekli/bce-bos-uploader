@@ -1,6 +1,6 @@
 {
   "name": "js-polyfills",
-  "version": "0.1.19",
+  "version": "0.1.20",
   "homepage": "https://github.com/inexorabletash/polyfill",
   "authors": [
     "Joshua Bell <inexorabletash@gmail.com>"
@@ -33,14 +33,13 @@
     "obsolete",
     "tests"
   ],
-  "_release": "0.1.19",
+  "_release": "0.1.20",
   "_resolution": {
     "type": "version",
-    "tag": "v0.1.19",
-    "commit": "a9dc7dc958980689b8fc5454d526e64347097ea8"
+    "tag": "v0.1.20",
+    "commit": "21b9d86bbf33f54561adbb85676d69f3e0d01240"
   },
-  "_source": "git://github.com/inexorabletash/polyfill.git",
+  "_source": "https://github.com/inexorabletash/polyfill.git",
   "_target": "^0.1.19",
-  "_originalSource": "js-polyfills",
-  "_direct": true
+  "_originalSource": "js-polyfills"
 }

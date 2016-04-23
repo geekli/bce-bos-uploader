@@ -306,7 +306,7 @@ Uploader.prototype._init = function () {
 
     var self = this;
     if (!this._xhr2Supported
-        && !u.isUndefined(mOxie)
+        && typeof mOxie !== 'undefined'
         && u.isFunction(mOxie.FileInput)) {
         // https://github.com/moxiecode/moxie/wiki/FileInput
         // mOxie.FileInput 只支持
@@ -697,7 +697,7 @@ Uploader.prototype._sendPostRequest = function (url, fields, file) {
     var self = this;
     var deferred = sdk.Q.defer();
 
-    if (u.isUndefined(mOxie)
+    if (typeof mOxie !== 'undefined'
         || !u.isFunction(mOxie.FormData)
         || !u.isFunction(mOxie.XMLHttpRequest)) {
         return sdk.Q.reject(new Error('mOxie is undefined.'));
