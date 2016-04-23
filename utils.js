@@ -40,6 +40,14 @@ function getIdByName(name) {
   return 'f' + (__uuid ++);
 }
 
+
+function getDefaultCssProgress() {
+  return '<div class="progress">' +
+          '  <div class="progress-bar progress-bar-success progress-bar-striped" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width: 0%">'
+          '  </div>' +
+          '</div>';
+}
+
 function getRowById(rowId) {
   return {
     setIgnore: function (ignored) {
@@ -51,7 +59,7 @@ function getRowById(rowId) {
       }
     },
     setProgress: function (progress) {
-      $('#' + rowId + ' .f-progress').html((progress * 100).toFixed(2) + '%');
+      $('#' + rowId + ' .f-progress .progress-bar').css('width', (progress * 100).toFixed(2) + '%');
     },
     setStatus: function (type, ok) {
       var container = $('#' + rowId + ' .f-status');
@@ -92,7 +100,7 @@ function FilesAdded(_, files) {
     var html = '<tr id="' + id + '">'
                + '<td class="f-id">' + (__uuid) + '</td>'
                + '<td class="f-status"><span class="glyphicon glyphicon-record"></span></td>'
-               + '<td class="f-progress">0.00%</td>'
+               + '<td class="f-progress">' + getDefaultCssProgress() + '</td>'
                + '<td class="f-size">' + (humanize.filesize(file.size)) + '</td>'
                + '<td class="f-time">-</td>'
                + '<td class="f-media">-</td>'
@@ -101,11 +109,11 @@ function FilesAdded(_, files) {
     if (__isEmpty) {
       __isEmpty = false;
       $('table tbody').html(html);
-      $('button[type=submit]').attr('disabled', false);
     }
     else {
       $('table tbody').append(html);
     }
+    $('button[type=submit]').attr('disabled', false);
   }
 }
 

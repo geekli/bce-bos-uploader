@@ -117,8 +117,23 @@ var uploader = new baidubce.bos.Uploader({
               row.setMediaId(file.__mediaId);
           });
     },
+    NetworkSpeed: function (_, bytes, time, pendings) {
+      var speed = bytes / (time / 1000);
+      var html = '上传速度：' + humanize.filesize(speed) + '/s';
+      var seconds = pendings / speed;
+      if (seconds > 1) {
+        var dhms = baidubce.utils.toDHMS(Math.ceil(seconds));
+        html += '，剩余时间：' + [
+          humanize.pad(dhms.HH, 2, '0'),
+          humanize.pad(dhms.MM, 2, '0'),
+          humanize.pad(dhms.SS, 2, '0')
+        ].join(':');
+      }
+
+      $('.network-speed').html(html);
+    },
     UploadComplete: function () {
-      // TODO
+      $('button[type=submit]').attr('disabled', false);
     },
     ListParts: function (_, file, uploadId) {
       // 恢复断点续传的时候，从本地获取 parts 的信息，避免从服务读取
