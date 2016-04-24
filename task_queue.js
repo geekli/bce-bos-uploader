@@ -63,7 +63,7 @@ TaskQueue.prototype.start = function () {
 
 TaskQueue.prototype._createClient = function () {
     var bucket = this._bucket;
-    var uptoken_url = 'http://180.76.133.248:1337/ack';
+    var uptoken_url = 'https://ack.efe.tech/';
     var timeout = 5000;
 
     var deferred = baidubce.sdk.Q.defer();

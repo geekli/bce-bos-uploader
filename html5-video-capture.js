@@ -16,7 +16,8 @@ var isChrome = !!navigator.webkitGetUserMedia;
 var mediaRecorder;
 
 function main() {
-    if (location.protocol === 'http:') {
+    if (location.protocol === 'http:'
+        && location.host === 'leeight.github.io') {
         location.replace(location.href.replace('http:', 'https:'));
         return;
     }
