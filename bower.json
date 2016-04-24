@@ -17,6 +17,8 @@
   "dependencies": {
     "bce-bos-uploader": "^1.2.0",
     "bootstrap": "^3.3.6",
-    "humanize": "^0.0.9"
+    "humanize": "^0.0.9",
+    "recordrtc": "^5.3.3",
+    "eventEmitter": "^4.3.0"
   }
 }

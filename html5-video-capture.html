@@ -1,0 +1,48 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HTML5 Video Capture</title>
+    <link rel="stylesheet" type="text/css" href="bower_components/bootstrap/dist/css/bootstrap.min.css" />
+    <script src="MediaStreamRecorder.js"></script>
+    <script src="bower_components/jquery/dist/jquery.min.js"></script>
+    <script src="bower_components/bce-bos-uploader/bce-bos-uploader.bundle.min.js"></script>
+    <script src="bower_components/humanize/humanize.js"></script>
+    <script src="bower_components/eventEmitter/EventEmitter.js"></script>
+    <style type="text/css">
+    video {
+        width: 320px;
+        height: 240px;
+        background-color: rgba(255,0,0,.5);
+    }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="row">
+        <div class="col-md-12">
+          <h2>HTML5 Video Capture demo</h2>
+          <div class="alert alert-success" role="alert">
+            演示如何基于 <code>MediaStreamRecorder</code> 把录制的视频上传通过<code>bce-sdk-js</code>上传到BOS服务器。
+          </div>
+          <button id="start" class="btn btn-success">开始录制</button>
+        </div>
+      </div>
+      <br />
+      <div class="row">
+        <div class="col-md-6">
+          <video id="source" autoplay controls></video>
+          <div class="source-info"></div>
+        </div>
+        <div class="col-md-6">
+          <video id="mirror" autoplay controls></video>
+          <div class="mirror-info"></div>
+        </div>
+      </div>
+    </div>
+  </body>
+  <script src="task.js"></script>
+  <script src="task_queue.js"></script>
+  <script src="html5-video-capture.js"></script>
+</html>
