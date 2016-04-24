@@ -62,6 +62,7 @@ TaskQueue.prototype.start = function () {
 };
 
 TaskQueue.prototype._createClient = function () {
+    var self = this;
     var bucket = this._bucket;
     var uptoken_url = 'https://ack.efe.tech/';
     var timeout = 5000;
