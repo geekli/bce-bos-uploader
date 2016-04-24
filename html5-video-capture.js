@@ -16,6 +16,11 @@ var isChrome = !!navigator.webkitGetUserMedia;
 var mediaRecorder;
 
 function main() {
+    if (location.protocol === 'http:') {
+        location.replace(location.href.replace('http:', 'https:'));
+        return;
+    }
+
     $('#start').click(startRecording);
 }
 
@@ -72,8 +77,8 @@ function onMediaSuccess(stream) {
         taskQueue.start()
             .then(function () {
                 // 上传结束了
-                var cdnUrl = baidubce.utils.transformUrl(mirrorUrl).replace('.bj.bcebos.com', '.bceimg.com');
-                video.src = cdnUrl;
+                // var cdnUrl = baidubce.utils.transformUrl(mirrorUrl).replace('.bj.bcebos.com', '.bceimg.com');
+                video.src = mirrorUrl;
             })
             .catch(function (error) {
                 console.error(error);

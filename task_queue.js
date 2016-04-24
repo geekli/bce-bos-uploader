@@ -36,7 +36,7 @@ function TaskQueue() {
 
     this._bucket = 'bce-bos-uploader';
 
-    this._endpoint = 'http://bj.bcebos.com';
+    this._endpoint = 'https://bj.bcebos.com';
 
     this._object = this._getDefaultKey();
 }
