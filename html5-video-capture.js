@@ -22,6 +22,13 @@ function main() {
         return;
     }
 
+    if (!navigator.getUserMedia) {
+        $('#start').attr('disabled', true);
+        $('.alert').attr('class', 'alert alert-warning')
+            .html('浏览器不支持 <code>navigator.getUserMedia</code>，无法使用。详情请参考：<a href="http://caniuse.com/#search=getUserMedia">http://caniuse.com/#search=getUserMedia</a>');
+        return;
+    }
+
     $('#start').click(startRecording);
 }
 
