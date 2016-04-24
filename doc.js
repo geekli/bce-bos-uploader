@@ -25,7 +25,7 @@ function toUrl(object) {
 var AK = getQuery('ak', 'afe4759592064eee930682e399249aba');
 var SK = getQuery('sk', '7785ea912b06449f8cbd084998a1e400');
 var DOC_ENDPOINT = getQuery('doc.endpoint', 'http://doc.baidubce.com');
-var BOS_ENDPOINT = getQuery('bos.endpoint', 'http://bos.bj.baidubce.com');
+var BOS_ENDPOINT = getQuery('bos.endpoint', 'https://bj.bcebos.com');
 var BOS_BUCKET = getQuery('bos.bucket', 'bkt-gawizxekph7vrnmb');
 var CHUNK_SIZE = '1m';
 
