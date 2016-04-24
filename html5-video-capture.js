@@ -96,6 +96,7 @@ function onMediaSuccess(stream) {
 
 function onMediaError(error) {
     console.error(error);
+    $('.alert').attr('class', 'alert alert-danger').html(String(error));
 }
 
 main();
