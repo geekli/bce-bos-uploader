@@ -90,12 +90,12 @@ var kDefaultOptions = {
     //     {bucket: 'the-bucket-name'}
     //   ]
     // }
-    bos_policy: null,
+    // bos_policy: null,
 
     // 低版本浏览器上传文件的时候，需要设置 policy_signature
     // 如果没有设置 bos_policy_signature 的话，会通过 uptoken_url 来请求
     // 默认只会请求一次，如果失效了，需要手动来重置 policy_signature
-    bos_policy_signature: null,
+    // bos_policy_signature: null,
 
     // JSONP 默认的超时时间(5000ms)
     uptoken_jsonp_timeout: 5000,
@@ -141,9 +141,7 @@ function Uploader(options) {
         }, $(options).data());
     }
 
-    var runtimeOptions = {
-        bos_policy: utils.getDefaultPolicy(options.bos_bucket)
-    };
+    var runtimeOptions = {};
     this.options = u.extend({}, kDefaultOptions, runtimeOptions, options);
     this.options.max_file_size = utils.parseSize(this.options.max_file_size);
     this.options.bos_multipart_min_size
@@ -210,6 +208,11 @@ function Uploader(options) {
      * @type {boolean}
      */
     this._xhr2Supported = utils.isXhr2Supported();
+
+    /**
+     * @type {Object.<string, *>}
+     */
+    this._policyMap = {};
 
     this._init();
 }
@@ -327,26 +330,6 @@ Uploader.prototype._init = function () {
     }
 
     var promise = sdk.Q.resolve();
-    if (!self._xhr2Supported) {
-        if (options.bos_policy && options.bos_credentials) {
-            promise = sdk.Q.fcall(function () {
-                var credentials = options.bos_credentials;
-                var auth = new sdk.Auth(credentials.ak, credentials.sk);
-                options.bos_policy_base64 = new Buffer(JSON.stringify(options.bos_policy)).toString('base64');
-                options.bos_policy_signature = auth.hash(options.bos_policy_base64, credentials.sk);
-                options.bos_ak = credentials.ak;
-            });
-        }
-        else {
-            promise = self._initPolicySignature().then(function (payload) {
-                if (payload) {
-                    options.bos_policy_base64 = payload.policy;
-                    options.bos_policy_signature = payload.signature;
-                    options.bos_ak = payload.accessKey;
-                }
-            });
-        }
-    }
 
     promise.then(function () {
         if (self._xhr2Supported
@@ -391,56 +374,31 @@ Uploader.prototype._init = function () {
     });
 };
 
-Uploader.prototype._initPolicySignature = function () {
+Uploader.prototype._initPolicySignature = function (bucketPolicy) {
     var options = this.options;
-    var bos_policy = options.bos_policy;
-    var bos_policy_signature = options.bos_policy_signature;
     var uptoken_url = options.uptoken_url;
     var timeout = options.uptoken_jsonp_timeout;
 
-    if (!bos_policy) {
-        // 如果没有设置 bos_policy，莫非因为 bucket 是 public-read-write?
-        // 因为默认情况下 bos_policy 是有内容设置的，所以如果出现不存在的情况
-        // 肯定是使用者显式的设置成 null 了
-        return sdk.Q.resolve();
-    }
-
-    if (!bos_policy_signature) {
-        // 如果设置了 bos_policy 但是没有设置 bos_policy_signature
-        // 那么就动态的从后台请求一次
-        if (!uptoken_url) {
-            return sdk.Q.reject(new Error('In order to get policy signature, `uptoken_url` must be setted.'));
+    var deferred = sdk.Q.defer();
+    $.ajax({
+        url: uptoken_url,
+        jsonp: 'callback',
+        dataType: 'jsonp',
+        timeout: timeout,
+        data: {
+            policy: JSON.stringify(bucketPolicy)
+        },
+        success: function (payload) {
+            // payload.policy (base64)
+            // payload.signature
+            // payload.accessKey
+            deferred.resolve(payload);
+        },
+        error: function () {
+            deferred.reject(new Error('Get policy signature timeout (' + timeout + 'ms).'));
         }
-
-        var deferred = sdk.Q.defer();
-        $.ajax({
-            url: uptoken_url,
-            jsonp: 'callback',
-            dataType: 'jsonp',
-            timeout: timeout,
-            data: {
-                policy: JSON.stringify(bos_policy)
-            },
-            success: function (payload) {
-                // payload.policy (base64)
-                // payload.signature
-                // payload.accessKey
-                deferred.resolve(payload);
-            },
-            error: function () {
-                deferred.reject(new Error('Get policy signature timeout (' + timeout + 'ms).'));
-            }
-        });
-        return deferred.promise;
-    }
-
-    // 不需要用户自己设置，主动计算一下就好了.
-    if (options.bos_policy_base64 == null) {
-        options.bos_policy_base64 = new Buffer(JSON.stringify(
-            bos_policy)).toString('base64');
-    }
-
-    return sdk.Q.resolve();
+    });
+    return deferred.promise;
 };
 
 Uploader.prototype._initEvents = function () {
@@ -667,21 +625,59 @@ Uploader.prototype._guessContentType = function (file, opt_ignoreCharset) {
     return contentType;
 };
 
+
+Uploader.prototype._getBucketPolicy = function (bucket) {
+    var self = this;
+    var options = self.options;
+
+    var payload = self._policyMap[bucket];
+
+    if (payload != null) {
+        return sdk.Q.resolve(payload);
+    }
+
+    var bucketPolicy = utils.getDefaultPolicy(bucket);
+    if (options.bos_credentials) {
+        var credentials = options.bos_credentials;
+        var auth = new sdk.Auth(credentials.ak, credentials.sk);
+        var policyBase64 = new Buffer(JSON.stringify(bucketPolicy)).toString('base64');
+        var policySignature = auth.hash(policyBase64, credentials.sk);
+        var policyAccessKey = credentials.ak;
+        payload = {
+            policy: policyBase64,
+            signature: policySignature,
+            accessKey: policyAccessKey
+        };
+        self._policyMap[bucket] = payload;
+        return sdk.Q.resolve(payload);
+    }
+
+    return self._initPolicySignature(bucketPolicy)
+        .then(function (payload) {
+            self._policyMap[bucket] = payload;
+            return payload;
+        });
+};
+
 Uploader.prototype._uploadNextViaPostObject = function (file, bucket, object) {
     var self = this;
-    var options = this.options;
     var config = this.client.config;
-    var url = config.endpoint.replace(/^(https?:\/\/)/, '$1' + bucket + '.');
-    var fields = {
-        'Content-Type': self._guessContentType(file, true),
-        'key': object,
-        'policy': options.bos_policy_base64,
-        'signature': options.bos_policy_signature,
-        'accessKey': options.bos_ak,
-        'success-action-status': '201'
-    };
 
-    return this._sendPostRequest(url, fields, file)
+    return this._getBucketPolicy(bucket)
+        .then(function (payload) {
+            var url = config.endpoint.replace(/^(https?:\/\/)/, '$1' + bucket + '.');
+
+            var fields = {
+                'Content-Type': self._guessContentType(file, true),
+                'key': object,
+                'policy': payload.policy,
+                'signature': payload.signature,
+                'accessKey': payload.accessKey,
+                'success-action-status': '201'
+            };
+
+            return self._sendPostRequest(url, fields, file);
+        })
         .then(function (response) {
             response.body.bucket = bucket;
             response.body.object = object;
