@@ -68,6 +68,10 @@ tr.ignored {
     overflow: hidden;
 }
 
+[hidden], template {
+    display: none !important;
+}
+
 
 
 

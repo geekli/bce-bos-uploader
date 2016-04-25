@@ -206,6 +206,10 @@ $('#view-all').click(function () {
 });
 
 
+if (getQuery('admin') == '1') {
+    $('[hidden]').removeAttr('hidden');
+}
+
 
 
 
