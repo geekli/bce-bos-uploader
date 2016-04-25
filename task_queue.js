@@ -34,7 +34,7 @@ function TaskQueue() {
 
     this._state = TaskState.INIT;
 
-    this._bucket = 'bce-bos-uploader';
+    this._bucket = 'bcecdn';
 
     this._endpoint = 'https://bj.bcebos.com';
 

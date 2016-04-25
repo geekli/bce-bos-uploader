@@ -85,8 +85,8 @@ function onMediaSuccess(stream) {
         taskQueue.start()
             .then(function () {
                 // 上传结束了
-                // var cdnUrl = baidubce.utils.transformUrl(mirrorUrl).replace('.bj.bcebos.com', '.bceimg.com');
-                video.src = mirrorUrl;
+                var cdnUrl = baidubce.utils.transformUrl(mirrorUrl).replace('.bj.bcebos.com', '.bdimg.com');
+                video.src = cdnUrl;
             })
             .catch(function (error) {
                 console.error(error);
