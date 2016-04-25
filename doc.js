@@ -206,7 +206,7 @@ $('#view-all').click(function () {
 });
 
 
-if (getQuery('admin') == '1') {
+if (getQuery('admin') == '1' && uploader._xhr2Supported) {
     $('[hidden]').removeAttr('hidden');
 }
 
