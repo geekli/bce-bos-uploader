@@ -21,6 +21,8 @@ var u = require('underscore');
 var sdk = require('bce-sdk-js');
 var SparkMD5 = require('spark-md5');
 
+var Queue = require('./queue');
+
 /**
  * 把文件进行切片，返回切片之后的数组
  *
@@ -572,4 +574,49 @@ exports.fixXhr = function (options, isBos) {
 
         return deferred.promise;
     };
+};
+
+
+exports.eachLimit = function (tasks, taskParallel, executer, done) {
+    var runningCount = 0;
+    var aborted = false;
+    var fin = false;      // done 只能被调用一次.
+    var queue = new Queue(tasks);
+
+    function infiniteLoop() {
+        var task = queue.dequeue();
+        if (!task) {
+            return;
+        }
+
+        runningCount++;
+        executer(task, function (error) {
+            runningCount--;
+
+            if (error) {
+                // 一旦有报错，终止运行
+                aborted = true;
+                fin = true;
+                done(error);
+            }
+            else {
+                if (!queue.isEmpty() && !aborted) {
+                    // 队列还有内容
+                    setTimeout(infiniteLoop, 0);
+                }
+                else if (runningCount <= 0) {
+                    // 队列空了，而且没有运行中的任务了
+                    if (!fin) {
+                        fin = true;
+                        done();
+                    }
+                }
+            }
+        });
+    }
+
+    taskParallel = Math.min(taskParallel, queue.size());
+    for (var i = 0; i < taskParallel; i++) {
+        infiniteLoop();
+    }
 };

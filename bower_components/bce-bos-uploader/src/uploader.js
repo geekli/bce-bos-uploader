@@ -551,6 +551,9 @@ Uploader.prototype._onFilesAdded = function (e) {
     files = this._filterFiles(files);
     if (u.isArray(files) && files.length) {
         this._invoke(kFilesAdded, [files]);
+        this._totalBytes += u.reduce(files, function (previous, item) {
+            return previous + item.size;
+        }, 0);
         this._files.push.apply(this._files, files);
     }
 
@@ -616,12 +619,9 @@ Uploader.prototype.start = function () {
         this._abort = false;
         this._startTime = utils.now();
         this._loadedBytes = 0;
-        this._totalBytes = u.reduce(this._files, function (previous, item) {
-            return previous + item.size;
-        }, 0);
 
         var taskParallel = this.options.bos_task_parallel;
-        async.eachLimit(this._files, taskParallel,
+        utils.eachLimit(this._files, taskParallel,
             function (file, callback) {
                 file._previousLoaded = 0;
                 self._uploadNext(file).fin(function () {
@@ -986,6 +986,8 @@ Uploader.prototype._uploadPart = function (state) {
 
     function uploadPartInner(item, opt_maxRetries) {
         if (item.etag) {
+            self._loadedBytes += item.partSize;
+
             // 跳过已上传的part
             return sdk.Q.resolve({
                 http_headers: {
