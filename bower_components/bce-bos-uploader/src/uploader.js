@@ -697,7 +697,7 @@ Uploader.prototype._sendPostRequest = function (url, fields, file) {
     var self = this;
     var deferred = sdk.Q.defer();
 
-    if (typeof mOxie !== 'undefined'
+    if (typeof mOxie === 'undefined'
         || !u.isFunction(mOxie.FormData)
         || !u.isFunction(mOxie.XMLHttpRequest)) {
         return sdk.Q.reject(new Error('mOxie is undefined.'));

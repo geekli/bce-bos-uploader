@@ -36,7 +36,7 @@ function TaskQueue() {
 
     this._bucket = 'bcecdn';
 
-    this._endpoint = 'https://bj.bcebos.com';
+    this._endpoint = 'http://bj.bcebos.com';
 
     this._object = this._getDefaultKey();
 }

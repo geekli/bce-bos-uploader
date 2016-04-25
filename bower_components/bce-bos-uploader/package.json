@@ -1,6 +1,6 @@
 {
   "name": "bce-bos-uploader",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "Baidu Object Storage Uploader",
   "main": "index.js",
   "scripts": {

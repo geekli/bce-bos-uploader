@@ -18,7 +18,7 @@ var VOD_ENDPOINT = getQuery('vod.endpoint', 'http://vod.baidubce.com');
 var VOD_BUCKET = getQuery('vod.bucket', 'vod-gauddsywyhn713kc');
 var VOD_EXTS = 'avi,mp4,flv,rm,rmvb,webm'.split(',');
 
-var BOS_ENDPOINT = getQuery('bos.endpoint', 'https://bj.bcebos.com');
+var BOS_ENDPOINT = getQuery('bos.endpoint', 'http://bj.bcebos.com');
 var BOS_BUCKET = 'eduyun';
 
 var DOC_ENDPOINT = getQuery('doc.endpoint', 'http://doc.baidubce.com');
@@ -38,7 +38,8 @@ var vod = new baidubce.sdk.VodClient({
 });
 
 function uuid() {
-  return (Math.random() * Math.pow(2, 32)).toString(36);
+  var value = Math.random() * Math.pow(2, 60);
+  return parseInt(value).toString(36);
 }
 
 function finVodKey(file, info) {
@@ -147,6 +148,7 @@ var uploader = new baidubce.bos.Uploader({
   browse_button: '#file',
   multi_selection: true,
   bos_endpoint: BOS_ENDPOINT,
+  bos_bucket: BOS_BUCKET,
   bos_ak: AK,
   bos_sk: SK,
   max_file_size: '1Gb',
