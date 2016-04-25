@@ -19,7 +19,7 @@
         <div class="col-md-12">
           <h2>bce-bos-uploader demo</h2>
           <div class="alert alert-warning" role="alert">
-            本页面向您展示如何使用javascript-sdk，上传转码文档
+            本页面向您展示如何使用<code>bce-bos-uploader</code>，上传文档，并调用<code>bce-sdk-js.DocClient</code>的API来完成文档转码，然后得到适应各种设备平台的文档预览地址
           </div>
           <form class="form-inline">
             <div class="form-group">
@@ -28,11 +28,12 @@
                 <input type="file" id="file" />
               </span>
               <button type="submit" class="btn btn-success" disabled>上传文档</button>
+              <button id="view-all" class="btn btn-default">查看文档列表</button>
               <span class="network-speed"></span>
             </div>
           </form>
           <br />
-          <table class="table table-bordered">
+          <table id="files" class="table table-bordered">
             <colgroup>
               <col width="50px" />
               <col width="50px" />
@@ -55,6 +56,33 @@
             <tbody>
               <tr>
                 <td colspan="7" class="empty">请选择文件...</td>
+              </tr>
+            </tbody>
+          </table>
+          <br />
+          <table id="docs" class="table table-bordered">
+            <colgroup>
+              <col width="50px" />
+              <col width="250px" />
+              <col width="120px" />
+              <col width="120px" />
+              <col width="170px" />
+              <col width="170px" />
+            </colgroup>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>名称</th>
+                <th>大小</th>
+                <th>状态</th>
+                <th>创建时间</th>
+                <th>发布时间</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colspan="7" class="empty">请点击 查看文档列表 按钮</td>
               </tr>
             </tbody>
           </table>

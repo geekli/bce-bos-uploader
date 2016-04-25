@@ -145,6 +145,66 @@ $('button[type=submit]').click(function () {
   return false;
 });
 
+$('table#docs').on('click', 'a[data-cmd]', function () {
+  var link = $(this);
+  var documentId = link.data('doc-id');
+  var cmd = link.data('cmd');
+  if (cmd === 'DELETE') {
+    link.text('删除中...');
+    var row = $(this).parents('tr');
+    doc.remove(documentId)
+      .then(function () {
+        row.remove();
+      })
+      .catch(function (error) {
+        alert(String(error));
+        link.text('删除');
+      });
+  }
+  return false;
+});
+
+$('#view-all').click(function () {
+  doc.list().then(function (response) {
+    var documents = response.body.documents;
+    documents.sort(function (a, b) {
+      var ac = new Date(a.createTime).getTime();
+      var bc = new Date(b.createTime).getTime();
+      if (ac > bc) {
+        return -1;
+      }
+      else if (ac < bc) {
+        return 1;
+      }
+      return 0;
+    });
+    var html = [];
+    for (var i = 0; i < documents.length; i++) {
+      var doc = documents[i];
+      // doc.docId -> 文档阅读ID，仅当文档状态为PUBLISHED时返回该字段
+      var title = doc.status === 'PUBLISHED'
+        ? '<a target="_blank" href="doc-viewer.html?id=' + doc.documentId +
+          '&title=' + encodeURIComponent(doc.title) + '">' + doc.title + '</a>'
+        : doc.title;
+      html.push(
+        '<tr>'
+        + '<td>' + (i + 1) + '</td>'
+        // + '<td>' + (doc.documentId) + '</td>'
+        + '<td class="doc-name">' + (title) + '</td>'
+        // + '<td>' + (doc.format) + '</td>'
+        + '<td>' + humanize.filesize(doc.meta.sizeInBytes) + '</td>'
+        + '<td>' + (doc.status) + '</td>'
+        + '<td>' + (doc.createTime) + '</td>'
+        + '<td>' + (doc.publishTime || '-') + '</td>'
+        + '<td><a data-cmd="DELETE" data-doc-id="' + doc.documentId + '" href="javascript:void(0)">删除</a></td>'
+        + '</tr>'
+      );
+    }
+    $('table#docs tbody').html(html.join(''));
+  });
+  return false;
+});
+
 
 
 

@@ -108,10 +108,10 @@ function FilesAdded(_, files) {
                + '</tr>';
     if (__isEmpty) {
       __isEmpty = false;
-      $('table tbody').html(html);
+      $('table#files tbody').html(html);
     }
     else {
-      $('table tbody').append(html);
+      $('table#files tbody').append(html);
     }
     $('button[type=submit]').attr('disabled', false);
   }
