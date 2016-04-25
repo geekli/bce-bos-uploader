@@ -107,21 +107,21 @@ function getDocKey(file) {
 
 function finBosKey(file) {
   var row = getRowById(file.__id);
-  row.setMediaId(file.__object);
+  row.setMediaId(file.__bosId);
 }
 
 function getBosKey(file) {
   var chunks = file.name.split('.');
   var ext = chunks.length > 1 ? chunks.pop() : '';
 
-  var object = 'bos-' + new Date().getTime() + '-'
-    + uuid() + (ext ? '.' + ext : '');
-  file.__object = object;
+  var object = 'bos-' + uuid() + (ext ? '.' + ext : '');
+  file.__bosId = object;
+  file.__object = 'uuid/' + object;
   file.__done = finBosKey;
 
   return {
     bucket: BOS_BUCKET,
-    key: object
+    key: file.__object
   };
 }
 
