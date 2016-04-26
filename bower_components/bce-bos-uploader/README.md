@@ -1,13 +1,13 @@
 ### Baidu Cloud Engine BOS Uploader
 
 bce-bos-uploader 是基于 [bce-sdk-js](https://github.com/baidubce/bce-sdk-js) 开发的一个 ui 组件，易用性更好。
-DEMO地址是：<http://leeight.github.io/bce-bos-uploader/>
+
+DEMO地址：<http://leeight.github.io/bce-bos-uploader/>
 
 ### 支持的浏览器
 
 1. 基于Xhr2和[File API](http://caniuse.com/#feat=fileapi)，可以支持：IE10+, Firefox/Chrome/Opera 最新版
 2. 借助[mOxie](https://github.com/moxiecode/moxie)，可以支持IE低版本（6,7,8,9）
-3. 移动设备上面的未经过完整测试，暂时不确定支持的范围
 
 ### 如何使用
 
@@ -66,6 +66,8 @@ var uploader = new baidubce.bos.Uploader({
 |bos_endpoint|N|http://bos.bj.baidubce.com|BOS服务器的地址|
 |bos_ak|N|无|如果没有设置`uptoken_url`的话，必须有`ak`和`sk`这个配置才可以工作|
 |bos_sk|N|无|如果没有设置`uptoken_url`的话，必须有`ak`和`sk`这个配置才可以工作|
+|bos_appendable|N|false|是否采用Append的方式上传文件**不支持IE低版本**|
+|bos_task_parallel|N|3|队列中文件并行上传的个数|
 |uptoken|N|无|sts token的内容|
 |get_new_uptoken|N|true|如果设置为false，会自动获取到Sts Token，上传的过程中可以减少一些请求|
 |auth_stripped_headers|N|['User-Agent', 'Connection']|如果计算签名的时候，需要剔除一些headers，可以配置这个参数|
@@ -79,8 +81,6 @@ var uploader = new baidubce.bos.Uploader({
 |bos_multipart_auto_continue|N|true|是否开启断点续传，如果设置成false，则UploadResume和UploadResumeError事件不会生效|
 |bos_multipart_local_key_generator|N|defaults|计算localStorage里面key的策略，可选值有`defaults`和`md5`|
 |accept|-|-|可以支持选择的文件类型|
-|bos_policy|-|默认值见下文|PostObject上传的时候，Policy内容|
-|bos_policy_signature|-|-|bos_policy的签名|
 |flash_swf_url|-|-|mOxie Flash文件的地址|
 
 #### 关于 bos_policy
@@ -174,8 +174,15 @@ var uploader = new baidubce.bos.Uploader({
     UploadProgress: function (_, file, progress, event) {
       // 文件的上传进度
     },
+    NetworkSpeed: function (_, bytes, time, pendings) {
+      var speed = bytes / time;             // 上传速度
+      var leftTime = pendings / (speed);    // 剩余时间
+      console.log(speed, leftTime);
+    },
     FileUploaded: function (_, file, info) {
       // 文件上传成功之后，调用这个函数
+      var url = [bos_endpoint, info.body.bucket, info.body.object].join('/');
+      console.log(url);
     },
     UploadPartProgress: function (_, file, progress, event) {
       // 分片上传的时候，单个分片的上传进度

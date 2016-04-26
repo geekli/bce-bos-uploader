@@ -186,7 +186,7 @@ function Uploader(options) {
     this._loadedBytes = 0;
 
     /**
-     * 记录队列中总文件的大小.
+     * 记录队列中总文件的大小, UploadComplete 之后会被清零
      * @type {number}
      */
     this._totalBytes = 0;
@@ -589,6 +589,7 @@ Uploader.prototype.start = function () {
             function (error) {
                 self._working = false;
                 self._files.length = 0;
+                self._totalBytes = 0;
                 self._invoke(kUploadComplete);
             });
     }
@@ -1070,12 +1071,17 @@ Uploader.prototype._uploadNext = function (file) {
 
     return sdk.Q.resolve(this._invoke(kKey, [file], throwErrors))
         .then(function (result) {
+            var multipart = 'auto';
+
             if (u.isString(result)) {
                 object = result;
             }
             else if (u.isObject(result)) {
                 bucket = result.bucket || bucket;
                 object = result.key || object;
+
+                // 'auto' / 'off'
+                multipart = result.multipart || multipart;
             }
 
             if (!self._xhr2Supported) {
@@ -1087,7 +1093,7 @@ Uploader.prototype._uploadNext = function (file) {
             }
 
             var multipartMinSize = options.bos_multipart_min_size;
-            if (file.size > multipartMinSize) {
+            if (multipart === 'auto' && file.size > multipartMinSize) {
                 return self._uploadNextViaMultipart(file, bucket, object);
             }
 

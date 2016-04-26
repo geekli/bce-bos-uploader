@@ -24,6 +24,7 @@ var BOS_BUCKET = 'eduyun';
 var DOC_ENDPOINT = getQuery('doc.endpoint', 'http://doc.baidubce.com');
 var DOC_BUCKET = getQuery('doc.bucket', 'bkt-gawizxekph7vrnmb');
 var DOC_EXTS = 'txt,pdf,doc,docx,ppt,pptx,xls,xlsx'.split(',');
+var DOC_MAX_SIZE = baidubce.utils.parseSize('100Mb');   // 文档最大 100Mb
 
 var CHUNK_SIZE = '1m';
 
@@ -92,6 +93,11 @@ function finDocKey(file, info) {
 }
 
 function getDocKey(file) {
+  if (file.size > DOC_MAX_SIZE) {
+    // 如果文档超过了允许的体积，就直接上传到 BOS
+    return getBosKey(file);
+  }
+
   // source/doc-gdxink1qakahwu6k.txt
   var format = file.name.split('.').pop();
   var name = uuid();
@@ -102,7 +108,8 @@ function getDocKey(file) {
 
   return {
     bucket: DOC_BUCKET,
-    key: object
+    key: object,
+    multipart: 'off'    //  禁用分片上传
   };
 }
 
