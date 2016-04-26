@@ -176,7 +176,7 @@ $('#view-all').click(function () {
       html.push(
         '<tr>'
         + '<td>' + (i + 1) + '</td>'
-        // + '<td>' + (doc.documentId) + '</td>'
+        + '<td>' + (doc.documentId) + '</td>'
         + '<td class="doc-name">' + (title) + '</td>'
         // + '<td>' + (doc.format) + '</td>'
         + '<td>' + humanize.filesize(doc.meta.sizeInBytes) + '</td>'
