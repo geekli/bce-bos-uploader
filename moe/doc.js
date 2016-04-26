@@ -113,19 +113,6 @@ var uploader = new baidubce.bos.Uploader({
     UploadComplete: function () {
       $('button[type=submit]').attr('disabled', true);
     },
-    ListParts: function (_, file, uploadId) {
-      // 恢复断点续传的时候，从本地获取 parts 的信息，避免从服务读取
-      // 有时候服务器没有开放读取的权限
-      try {
-        var parts = localStorage.getItem(uploadId);
-        return JSON.parse(parts);
-      }
-      catch (ex) {
-      }
-    },
-    ChunkUploaded: function (_, file, result) {
-      console.log(JSON.stringify(result));
-    },
     Error: function (_, error, file) {
       var row = getRowById(file.__id);
       if (error.status_code === 0) {

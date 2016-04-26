@@ -114,17 +114,29 @@ function getDocKey(file) {
 }
 
 function finBosKey(file) {
+  var localKey = ['bos', AK, file.name, file.size, CHUNK_SIZE].join('&');
+  localStorage.removeItem(localKey);
+
   var row = getRowById(file.__id);
   row.setMediaId(file.__bosId);
 }
 
 function getBosKey(file) {
-  var chunks = file.name.split('.');
-  var ext = chunks.length > 1 ? chunks.pop() : '';
+  var localKey = ['bos', AK, file.name, file.size, CHUNK_SIZE].join('&');
+  var localValue = localStorage.getItem(localKey);
 
-  var object = 'bos-' + uuid() + (ext ? '.' + ext : '');
-  file.__bosId = object;
-  file.__object = 'uuid/' + object;
+  if (!localValue) {
+    var chunks = file.name.split('.');
+    var ext = chunks.length > 1 ? chunks.pop() : '';
+
+    var object = 'bos-' + uuid() + (ext ? '.' + ext : '');
+    localValue = object;
+
+    localStorage.setItem(localKey, localValue);
+  }
+
+  file.__bosId = localValue;
+  file.__object = 'uuid/' + localValue;
   file.__done = finBosKey;
 
   return {
