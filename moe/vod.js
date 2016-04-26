@@ -167,7 +167,8 @@ $('#view-all').click(function () {
   var options = {
     params: {
       pageNo: 1,
-      pageSize: 10
+      pageSize: 10,
+      status: 'PUBLISHED'
     }
   };
   vod.listMediaResources(options).then(function (response) {
