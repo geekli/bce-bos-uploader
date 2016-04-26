@@ -43,8 +43,20 @@ function uuid() {
   return parseInt(value).toString(36);
 }
 
+function getLSIndex(type, file) {
+  var index = [type, AK, file.name, file.size, CHUNK_SIZE].join('&');
+  return index;
+}
+
+function getUUIDFile(type, file) {
+    var chunks = file.name.split('.');
+    var ext = chunks.length > 1 ? chunks.pop() : '';
+
+    return type + '-' + uuid() + (ext ? '.' + ext : '');
+}
+
 function finVodKey(file, info) {
-  var localKey = [AK, file.name, file.size, CHUNK_SIZE].join('&');
+  var localKey = getLSIndex('vod', file);
   localStorage.removeItem(localKey);
 
   vod._internalCreateMediaResource(file.__mediaId, file.name, '测试文件')
@@ -55,7 +67,7 @@ function finVodKey(file, info) {
 }
 
 function getVodKey(file) {
-  var localKey = [AK, file.name, file.size, CHUNK_SIZE].join('&');
+  var localKey = getLSIndex('vod', file);
   var localValue = localStorage.getItem(localKey);
   if (!localValue) {
     return vod.buildRequest('POST', null, 'apply').then(function (response) {
@@ -85,6 +97,9 @@ function getVodKey(file) {
 }
 
 function finDocKey(file, info) {
+  var localKey = getLSIndex('doc', file);
+  localStorage.removeItem(localKey);
+
   doc.createFromBos(DOC_BUCKET, file.__object, file.name)
     .then(function (response) {
       var row = getRowById(file.__id);
@@ -98,23 +113,22 @@ function getDocKey(file) {
     return getBosKey(file);
   }
 
-  // source/doc-gdxink1qakahwu6k.txt
-  var format = file.name.split('.').pop();
-  var name = uuid();
-  var object = 'source/doc-' + name + '.' + format;
+  var localKey = getLSIndex('doc', file);
+  var localValue = localStorage.getItem(localKey) || getUUIDFile('doc', file);
+  localStorage.setItem(localKey, localValue);
 
-  file.__object = object;
+  file.__target = 'doc';
+  file.__object = 'source/' + localValue;
   file.__done = finDocKey;
 
   return {
     bucket: DOC_BUCKET,
-    key: object,
-    multipart: 'off'    //  禁用分片上传
+    key: file.__object
   };
 }
 
 function finBosKey(file) {
-  var localKey = ['bos', AK, file.name, file.size, CHUNK_SIZE].join('&');
+  var localKey = getLSIndex('bos', file);
   localStorage.removeItem(localKey);
 
   var row = getRowById(file.__id);
@@ -122,18 +136,9 @@ function finBosKey(file) {
 }
 
 function getBosKey(file) {
-  var localKey = ['bos', AK, file.name, file.size, CHUNK_SIZE].join('&');
-  var localValue = localStorage.getItem(localKey);
-
-  if (!localValue) {
-    var chunks = file.name.split('.');
-    var ext = chunks.length > 1 ? chunks.pop() : '';
-
-    var object = 'bos-' + uuid() + (ext ? '.' + ext : '');
-    localValue = object;
-
-    localStorage.setItem(localKey, localValue);
-  }
+  var localKey = getLSIndex('bos', file);
+  var localValue = localStorage.getItem(localKey) || getUUIDFile('bos', file);
+  localStorage.setItem(localKey, localValue);
 
   file.__bosId = localValue;
   file.__object = 'uuid/' + localValue;
@@ -189,10 +194,24 @@ var uploader = new baidubce.bos.Uploader({
       var row = getRowById(file.__id);
       row.setProgress(progress);
     },
+    ObjectMetas: function (_, file) {
+      if (file.__target === 'doc') {
+        // 如果文档进入 Multipart Upload 的模式，必须手工设置 x-bce-meta-md5
+        // 如果是正常的 PutObject 模式，服务器会设置 ETag
+        // 另外，文档会被限制在 100Mb 以内，所以本地计算 md5 应该不会特别慢
+        return baidubce.utils.md5sum(file).then(function (md5) {
+          return {
+            'x-bce-meta-md5': md5
+          };
+        });
+      }
+    },
     Key: function (_, file) {
       return getKey(file);
     },
     FileUploaded: function (_, file, info) {
+      localStorage.removeItem(file.__uploadId);
+
       var time = ((new Date().getTime() - file.__startTime) / 1000).toFixed(2);
       var row = getRowById(file.__id);
       var url = [BOS_ENDPOINT, info.body.bucket, info.body.object].join('/');
@@ -220,6 +239,41 @@ var uploader = new baidubce.bos.Uploader({
     },
     UploadComplete: function () {
       $('button[type=submit]').attr('disabled', true);
+    },
+    ListParts: function (_, file, uploadId) {
+      // 恢复断点续传的时候，从本地获取 parts 的信息，避免从服务读取
+      // 有时候服务器没有开放读取的权限
+      try {
+        var parts = localStorage.getItem(uploadId);
+        return JSON.parse(parts);
+      }
+      catch (ex) {
+      }
+    },
+    ChunkUploaded: function (_, file, result) {
+      var partNumber = result.partNumber;
+      var uploadId = result.uploadId;
+      var response = result.response;
+      var eTag = response.http_headers.etag;
+
+      file.__uploadId = uploadId;
+
+      if (eTag) {
+        var parts = localStorage.getItem(uploadId);
+        if (!parts) {
+          parts = [];
+        }
+        else {
+          parts = JSON.parse(parts);
+        }
+
+        parts.push({
+          partNumber: partNumber,
+          eTag: eTag
+        });
+
+        localStorage.setItem(uploadId, JSON.stringify(parts));
+      }
     },
     Error: function (_, error, file) {
       var row = getRowById(file.__id);

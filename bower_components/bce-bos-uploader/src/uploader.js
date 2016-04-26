@@ -108,7 +108,7 @@ var kDefaultOptions = {
 var kPostInit = 'PostInit';
 var kKey = 'Key';
 var kListParts = 'ListParts';
-
+var kObjectMetas = 'ObjectMetas';
 // var kFilesRemoved   = 'FilesRemoved';
 var kFileFiltered = 'FileFiltered';
 var kFilesAdded = 'FilesAdded';
@@ -747,11 +747,9 @@ Uploader.prototype._sendPostRequest = function (url, fields, file) {
 };
 
 
-Uploader.prototype._uploadNextViaMultipart = function (file, bucket, object) {
+Uploader.prototype._uploadNextViaMultipart = function (file, bucket, object, metas) {
     var contentType = this._guessContentType(file);
-    var options = {
-        'Content-Type': contentType
-    };
+    var options = {'Content-Type': contentType};
 
     var self = this;
     var uploadId = null;
@@ -835,7 +833,7 @@ Uploader.prototype._uploadNextViaMultipart = function (file, bucket, object) {
             }).then(function (key) {
                 utils.removeUploadId(key);
             });
-            return self.client.completeMultipartUpload(bucket, object, uploadId, partList);
+            return self.client.completeMultipartUpload(bucket, object, uploadId, partList, metas);
         })
         .then(function (response) {
             self._invoke(kUploadProgress, [file, 1]);
@@ -1069,36 +1067,40 @@ Uploader.prototype._uploadNext = function (file) {
     var object = file.name;
     var throwErrors = true;
 
-    return sdk.Q.resolve(this._invoke(kKey, [file], throwErrors))
-        .then(function (result) {
-            var multipart = 'auto';
+    return sdk.Q.all([
+        this._invoke(kKey, [file], throwErrors),
+        this._invoke(kObjectMetas, [file])
+    ]).then(function (array) {
+        var result = array[0];
+        var objectMetas = array[1];
 
-            if (u.isString(result)) {
-                object = result;
-            }
-            else if (u.isObject(result)) {
-                bucket = result.bucket || bucket;
-                object = result.key || object;
+        var multipart = 'auto';
+        if (u.isString(result)) {
+            object = result;
+        }
+        else if (u.isObject(result)) {
+            bucket = result.bucket || bucket;
+            object = result.key || object;
 
-                // 'auto' / 'off'
-                multipart = result.multipart || multipart;
-            }
+            // 'auto' / 'off'
+            multipart = result.multipart || multipart;
+        }
 
-            if (!self._xhr2Supported) {
-                return self._uploadNextViaPostObject(file, bucket, object);
-            }
+        if (!self._xhr2Supported) {
+            return self._uploadNextViaPostObject(file, bucket, object);
+        }
 
-            if (options.bos_appendable === true) {
-                return self._uploadNextViaAppendObject(file, bucket, object);
-            }
+        if (options.bos_appendable === true) {
+            return self._uploadNextViaAppendObject(file, bucket, object, objectMetas);
+        }
 
-            var multipartMinSize = options.bos_multipart_min_size;
-            if (multipart === 'auto' && file.size > multipartMinSize) {
-                return self._uploadNextViaMultipart(file, bucket, object);
-            }
+        var multipartMinSize = options.bos_multipart_min_size;
+        if (multipart === 'auto' && file.size > multipartMinSize) {
+            return self._uploadNextViaMultipart(file, bucket, object, objectMetas);
+        }
 
-            return self._uploadNextViaPutObject(file, bucket, object);
-        });
+        return self._uploadNextViaPutObject(file, bucket, object, objectMetas);
+    });
 };
 
 Uploader.prototype._getObjectMetadata = function (bucket, object) {
@@ -1120,7 +1122,7 @@ Uploader.prototype._getObjectMetadata = function (bucket, object) {
         });
 };
 
-Uploader.prototype._uploadNextViaAppendObject = function (file, bucket, object) {
+Uploader.prototype._uploadNextViaAppendObject = function (file, bucket, object, metas) {
     // 调用 getObjectMeta 接口获取 x-bce-next-append-offset 和 x-bce-object-type
     // 如果 x-bce-object-type 不是 "Appendable"，那么就不支持断点续传了
     var self = this;
@@ -1170,10 +1172,10 @@ Uploader.prototype._uploadNextViaAppendObject = function (file, bucket, object) 
                     var reject = function (error) {
                         callback(error);
                     };
-                    var options = {
+                    var options = u.extend({
                         'Content-Type': contentType,
                         'Content-Length': item.partSize
-                    };
+                    }, metas);
                     self.client.appendObjectFromBlob(bucket, object,
                         blob, offsetArgument, options).then(resolve, reject);
                 },
@@ -1203,11 +1205,9 @@ Uploader.prototype._uploadNextViaAppendObject = function (file, bucket, object) 
         });
 };
 
-Uploader.prototype._uploadNextViaPutObject = function (file, bucket, object, opt_maxRetries) {
+Uploader.prototype._uploadNextViaPutObject = function (file, bucket, object, metas, opt_maxRetries) {
     var contentType = this._guessContentType(file);
-    var options = {
-        'Content-Type': contentType
-    };
+    var options = u.extend({'Content-Type': contentType}, metas);
 
     var self = this;
     var maxRetries = opt_maxRetries == null
@@ -1236,7 +1236,7 @@ Uploader.prototype._uploadNextViaPutObject = function (file, bucket, object, opt
             // }
             else if (maxRetries > 0) {
                 // 还有几乎重试
-                return self._uploadNextViaPutObject(file, bucket, object, maxRetries - 1);
+                return self._uploadNextViaPutObject(file, bucket, object, metas, maxRetries - 1);
             }
 
             // 重试结束了，不管了，继续下一个文件的上传
