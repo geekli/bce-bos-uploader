@@ -326,6 +326,11 @@ Uploader.prototype._init = function () {
         });
 
         fileInput.onchange = u.bind(this._onFilesAdded, this);
+        fileInput.onready = function () {
+            self._initEvents();
+            self._invoke(kPostInit);
+        };
+
         fileInput.init();
     }
 
@@ -366,8 +371,12 @@ Uploader.prototype._init = function () {
             // 服务端动态签名的方式
             self.client.createSignature = self._getCustomizedSignature(options.uptoken_url);
         }
-        self._initEvents();
-        self._invoke(kPostInit);
+
+        if (self._xhr2Supported) {
+            // 对于不支持 xhr2 的情况，会在 onready 的时候去触发事件
+            self._initEvents();
+            self._invoke(kPostInit);
+        }
     }).catch(function (error) {
         debug(error);
         self._invoke(kError, [error]);
@@ -403,23 +412,26 @@ Uploader.prototype._initPolicySignature = function (bucketPolicy) {
 
 Uploader.prototype._initEvents = function () {
     var options = this.options;
-    var btn = $(options.browse_button);
-    if (btn.attr('multiple') == null) {
-        // 如果用户没有显示的设置过 multiple，使用 multi_selection 的设置
-        // 否则保留 <input multiple /> 的内容
-        btn.attr('multiple', !!options.multi_selection);
-    }
-    btn.on('change', u.bind(this._onFilesAdded, this));
 
-    var accept = options.accept;
-    if (accept != null) {
-        btn.attr('accept', utils.expandAccept(accept));
-    }
+    if (this._xhr2Supported) {
+        var btn = $(options.browse_button);
+        if (btn.attr('multiple') == null) {
+            // 如果用户没有显示的设置过 multiple，使用 multi_selection 的设置
+            // 否则保留 <input multiple /> 的内容
+            btn.attr('multiple', !!options.multi_selection);
+        }
+        btn.on('change', u.bind(this._onFilesAdded, this));
 
-    if (options.dir_selection) {
-        btn.attr('directory', true);
-        btn.attr('mozdirectory', true);
-        btn.attr('webkitdirectory', true);
+        var accept = options.accept;
+        if (accept != null) {
+            btn.attr('accept', utils.expandAccept(accept));
+        }
+
+        if (options.dir_selection) {
+            btn.attr('directory', true);
+            btn.attr('mozdirectory', true);
+            btn.attr('webkitdirectory', true);
+        }
     }
 
     this.client.on('progress', u.bind(this._onUploadProgress, this));

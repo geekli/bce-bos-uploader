@@ -72,6 +72,9 @@ tr.ignored {
     display: none !important;
 }
 
+.modal-body .table {
+    width: auto;
+}
 
 
 

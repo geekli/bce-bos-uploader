@@ -48,11 +48,23 @@ function getLSIndex(type, file) {
   return index;
 }
 
-function getUUIDFile(type, file) {
-    var chunks = file.name.split('.');
-    var ext = chunks.length > 1 ? chunks.pop() : '';
+function appendLS(key, item) {
+  var value = [];
+  try {
+    value = JSON.parse(localStorage.getItem(key) || '[]');
+  }
+  catch (ex) {
+  }
 
-    return type + '-' + uuid() + (ext ? '.' + ext : '');
+  value.push(item);
+  localStorage.setItem(key, JSON.stringify(value));
+}
+
+function getUUIDFile(type, file) {
+  var chunks = file.name.split('.');
+  var ext = chunks.length > 1 ? chunks.pop() : '';
+
+  return type + '-' + uuid() + (ext ? '.' + ext : '');
 }
 
 function finVodKey(file, info) {
@@ -63,6 +75,8 @@ function finVodKey(file, info) {
     .then(function () {
       var row = getRowById(file.__id);
       row.setMediaId(file.__mediaId);
+
+      appendLS('vods', file.__mediaId);
     });
 }
 
@@ -102,8 +116,11 @@ function finDocKey(file, info) {
 
   doc.createFromBos(DOC_BUCKET, file.__object, file.name)
     .then(function (response) {
+      var documentId = response.body.documentId;
       var row = getRowById(file.__id);
-      row.setMediaId(response.body.documentId);
+      row.setMediaId(documentId);
+
+      appendLS('docs', documentId);
     });
 }
 
@@ -294,6 +311,95 @@ $('button[type=submit]').click(function () {
   return false;
 });
 
+
+$('#view-vods-modal').on('shown.bs.modal', function (e) {
+  var mediaIds = JSON.parse(localStorage.getItem('vods') || '[]');
+  if (!mediaIds.length) {
+    return;
+  }
+
+  $('#vods .empty').text('查询中...');
+  var tasks = mediaIds.map(function (mediaId) {
+    return vod.getMediaResource(mediaId);
+  });
+  baidubce.sdk.Q.all(tasks).then(function (responses) {
+    var medias = responses.map(function (response) {
+      return response.body;
+    });
+    return medias;
+  }).then(function (medias) {
+    var html = [];
+    for (var i = 0; i < medias.length; i++) {
+      var item = medias[i];
+      var title = item.attributes.title || '-';
+      if (item.status === 'PUBLISHED') {
+        title = '<a target="_blank" href="vod-viewer.html?id=' + item.mediaId +
+          '&title=' + encodeURIComponent(title) + '">' + title + '</a>'
+      }
+      html.push(
+        '<tr>'
+        + '<td>' + (i + 1) + '</td>'
+        + '<td class="doc-name">' + (title) + '</td>'
+        + '<td>' + humanize.filesize(item.meta.sizeInBytes) + ' / ' + item.meta.durationInSeconds + '</td>'
+        + '<td>' + (item.status) + '</td>'
+        + '<td>' + (item.createTime) + '</td>'
+        + '<td>' + (item.publishTime || '-') + '</td>'
+        + '</tr>'
+      );
+    }
+    $('#vods tbody').html(html.join(''));
+  });
+});
+
+$('#view-docs-modal').on('shown.bs.modal', function (e) {
+  var documentIds = JSON.parse(localStorage.getItem('docs') || '[]');
+  if (!documentIds.length) {
+    return;
+  }
+
+  $('#docs .empty').text('查询中...');
+  var tasks = documentIds.map(function (docId) {
+    return doc.get(docId);
+  });
+  baidubce.sdk.Q.all(tasks).then(function (responses) {
+    var documents = responses.map(function (response) {
+      return response.body;
+    });
+    return documents;
+  }).then(function (documents) {
+    documents.sort(function (a, b) {
+      var ac = new Date(a.createTime).getTime();
+      var bc = new Date(b.createTime).getTime();
+      if (ac > bc) {
+        return -1;
+      }
+      else if (ac < bc) {
+        return 1;
+      }
+      return 0;
+    });
+    var html = [];
+    for (var i = 0; i < documents.length; i++) {
+      var doc = documents[i];
+      // doc.docId -> 文档阅读ID，仅当文档状态为PUBLISHED时返回该字段
+      var title = doc.status === 'PUBLISHED'
+        ? '<a target="_blank" href="doc-viewer.html?id=' + doc.documentId +
+          '&title=' + encodeURIComponent(doc.title) + '">' + doc.title + '</a>'
+        : doc.title;
+      html.push(
+        '<tr>'
+        + '<td>' + (i + 1) + '</td>'
+        + '<td class="doc-name">' + (title) + '<br/>' + doc.documentId + '</td>'
+        + '<td>' + humanize.filesize(doc.meta.sizeInBytes) + '</td>'
+        + '<td>' + (doc.status) + '</td>'
+        + '<td>' + (doc.createTime) + '</td>'
+        + '<td>' + (doc.publishTime || '-') + '</td>'
+        + '</tr>'
+      );
+    }
+    $('#docs tbody').html(html.join(''));
+  });
+});
 
 
 
