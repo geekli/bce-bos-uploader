@@ -650,7 +650,8 @@ Uploader.prototype._getBucketPolicy = function (bucket) {
     }
 
     var bucketPolicy = utils.getDefaultPolicy(bucket);
-    if (options.bos_credentials) {
+    if (options.bos_credentials && !options.uptoken) {
+        // 如果没有 options.uptoken，说明不是 临时 ak 和 sk
         var credentials = options.bos_credentials;
         var auth = new sdk.Auth(credentials.ak, credentials.sk);
         var policyBase64 = new Buffer(JSON.stringify(bucketPolicy)).toString('base64');

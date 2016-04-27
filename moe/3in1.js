@@ -14,6 +14,11 @@
 var AK = getQuery('ak', 'afe4759592064eee930682e399249aba');
 var SK = getQuery('sk', '7785ea912b06449f8cbd084998a1e400');
 
+// 如果使用临时 AK 和 SK，必须设置 SESSION_TOKEN 和 UPTOKEN_URL 这两个参数
+// **缺一不可**
+var SESSION_TOKEN = null;
+var UPTOKEN_URL = 'http://localhost.baidu.com:7788/ack';
+
 var VOD_ENDPOINT = getQuery('vod.endpoint', 'http://vod.baidubce.com');
 var VOD_BUCKET = getQuery('vod.bucket', 'vod-gauddsywyhn713kc');
 var VOD_EXTS = 'avi,mp4,flv,rm,rmvb,webm'.split(',');
@@ -30,12 +35,14 @@ var CHUNK_SIZE = '1m';
 
 var doc = new baidubce.sdk.DocClient.Document({
   endpoint: DOC_ENDPOINT,
-  credentials: {ak: AK, sk: SK}
+  credentials: {ak: AK, sk: SK},
+  sessionToken: SESSION_TOKEN
 });
 
 var vod = new baidubce.sdk.VodClient({
   endpoint: VOD_ENDPOINT,
-  credentials: {ak: AK, sk: SK}
+  credentials: {ak: AK, sk: SK},
+  sessionToken: SESSION_TOKEN
 });
 
 function uuid() {
@@ -190,8 +197,15 @@ var uploader = new baidubce.bos.Uploader({
   multi_selection: true,
   bos_endpoint: BOS_ENDPOINT,
   bos_bucket: BOS_BUCKET,
+
   bos_ak: AK,
   bos_sk: SK,
+  uptoken: SESSION_TOKEN,
+
+  // IE下面的 PostObject 请求不能用临时 ak 和 sk, 因此
+  // 需要通过这个 URL 来动态计算 policy 签名
+  uptoken_url: UPTOKEN_URL,
+
   max_file_size: '1Gb',
   chunk_size: CHUNK_SIZE,
   flash_swf_url: '../bower_components/moxie/bin/flash/Moxie.swf',
