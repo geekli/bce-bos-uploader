@@ -215,6 +215,7 @@ var uploader = new baidubce.bos.Uploader({
     },
     FilesAdded: function (_, files) {
       FilesAdded(_, files);
+      $('#form').get(0).reset();
     },
     BeforeUpload: function (_, file) {
       file.__startTime = new Date().getTime();
