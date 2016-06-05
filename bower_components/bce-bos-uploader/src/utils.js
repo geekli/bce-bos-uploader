@@ -620,3 +620,25 @@ exports.eachLimit = function (tasks, taskParallel, executer, done) {
         infiniteLoop();
     }
 };
+
+exports.inherits = function (ChildCtor, ParentCtor) {
+    ChildCtor.prototype = Object.create(ParentCtor.prototype);
+    ChildCtor.prototype.constructor = ChildCtor;
+};
+
+exports.guessContentType = function (file, opt_ignoreCharset) {
+    var contentType = file.type;
+    if (!contentType) {
+        var object = file.name;
+        var ext = object.split(/\./g).pop();
+        contentType = sdk.MimeType.guess(ext);
+    }
+
+    // Firefox在POST的时候，Content-Type 一定会有Charset的，因此
+    // 这里不管3721，都加上.
+    if (!opt_ignoreCharset && !/charset=/.test(contentType)) {
+        contentType += '; charset=UTF-8';
+    }
+
+    return contentType;
+};

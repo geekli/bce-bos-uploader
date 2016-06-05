@@ -16,115 +16,19 @@
 
 var sdk = require('bce-sdk-js');
 var u = require('underscore');
-var async = require('async');
 var debug = require('debug')('bce-bos-uploader');
 
 var utils = require('./utils');
 var tracker = require('./tracker');
-
-var kDefaultOptions = {
-    runtimes: 'html5',
-
-    // bos服务器的地址，默认(http://bos.bj.baidubce.com)
-    bos_endpoint: 'http://bos.bj.baidubce.com',
-
-    // 默认的 ak 和 sk 配置
-    bos_credentials: null,
-
-    // 如果切换到 appendable 模式，最大只支持 5G 的文件
-    // 不再支持 Multipart 的方式上传文件
-    bos_appendable: false,
-
-    // 为了处理 Flash 不能发送 HEAD, DELETE 之类的请求，以及无法
-    // 获取 response headers 的问题，需要搞一个 relay 服务器，把数据
-    // 格式转化一下
-    bos_relay_server: 'https://relay.efe.tech',
-
-    // 是否支持多选，默认(false)
-    multi_selection: false,
-
-    // 失败之后重试的次数(单个文件或者分片)，默认(0)，不重试
-    max_retries: 0,
-
-    // 是否自动上传，默认(false)
-    auto_start: false,
-
-    // 最大可以选择的文件大小，默认(100M)
-    max_file_size: '100mb',
-
-    // 超过这个文件大小之后，开始使用分片上传，默认(10M)
-    bos_multipart_min_size: '10mb',
-
-    // 分片上传的时候，并行上传的个数，默认(1)
-    bos_multipart_parallel: 1,
-
-    // 队列中的文件，并行上传的个数，默认(3)
-    bos_task_parallel: 3,
-
-    // 计算签名的时候，有些 header 需要剔除，减少传输的体积
-    auth_stripped_headers: ['User-Agent', 'Connection'],
-
-    // 分片上传的时候，每个分片的大小，默认(4M)
-    chunk_size: '4mb',
-
-    // 分块上传时,是否允许断点续传，默认(true)
-    bos_multipart_auto_continue: true,
-
-    // 分开上传的时候，localStorage里面key的生成方式，默认是 `default`
-    // 如果需要自定义，可以通过 XXX
-    bos_multipart_local_key_generator: 'default',
-
-    // 是否允许选择目录
-    dir_selection: false,
-
-    // 是否需要每次都去服务器计算签名
-    get_new_uptoken: true,
-
-    // 因为使用 Form Post 的格式，没有设置额外的 Header，从而可以保证
-    // 使用 Flash 也能上传大文件
-    // 低版本浏览器上传文件的时候，需要设置 policy，默认情况下
-    // policy的内容只需要包含 expiration 和 conditions 即可
-    // policy: {
-    //   expiration: 'xx',
-    //   conditions: [
-    //     {bucket: 'the-bucket-name'}
-    //   ]
-    // }
-    // bos_policy: null,
-
-    // 低版本浏览器上传文件的时候，需要设置 policy_signature
-    // 如果没有设置 bos_policy_signature 的话，会通过 uptoken_url 来请求
-    // 默认只会请求一次，如果失效了，需要手动来重置 policy_signature
-    // bos_policy_signature: null,
-
-    // JSONP 默认的超时时间(5000ms)
-    uptoken_jsonp_timeout: 5000,
-
-    // 是否要禁用统计，默认不禁用
-    // 如果需要禁用，把 tracker_id 设置成 null 即可
-    tracker_id: '2e0bc8c5e7ceb25796ba4962e7b57387'
-};
-
-var kPostInit = 'PostInit';
-var kKey = 'Key';
-var kListParts = 'ListParts';
-var kObjectMetas = 'ObjectMetas';
-// var kFilesRemoved   = 'FilesRemoved';
-var kFileFiltered = 'FileFiltered';
-var kFilesAdded = 'FilesAdded';
-var kFilesFilter = 'FilesFilter';
-var kNetworkSpeed = 'NetworkSpeed';
-var kBeforeUpload = 'BeforeUpload';
-// var kUploadFile     = 'UploadFile';       // ??
-var kUploadProgress = 'UploadProgress';
-var kFileUploaded = 'FileUploaded';
-var kUploadPartProgress = 'UploadPartProgress';
-var kChunkUploaded = 'ChunkUploaded';
-var kUploadResume = 'UploadResume'; // 断点续传
-// var kUploadPause = 'UploadPause';   // 暂停
-var kUploadResumeError = 'UploadResumeError'; // 尝试断点续传失败
-var kUploadComplete = 'UploadComplete';
-var kError = 'Error';
+var events = require('./events');
+var kDefaultOptions = require('./config');
+var PutObjectTask = require('./put_object_task');
+var AppendObjectTask = require('./append_object_task');
+var MultipartTask = require('./multipart_task');
+var PostObjectTask = require('./post_object_task');
+var StsTokenManager = require('./sts_token_manager');
+var PolicyManager = require('./policy_manager');
+var NetworkInfo = require('./network_info');
 
 /**
  * BCE BOS Uploader
@@ -146,8 +50,7 @@ function Uploader(options) {
     this.options.max_file_size = utils.parseSize(this.options.max_file_size);
     this.options.bos_multipart_min_size
         = utils.parseSize(this.options.bos_multipart_min_size);
-    this.options.chunk_size = this._resetChunkSize(
-        utils.parseSize(this.options.chunk_size));
+    this.options.chunk_size = utils.parseSize(this.options.chunk_size);
 
     var credentials = this.options.bos_credentials;
     if (!credentials && this.options.bos_ak && this.options.bos_sk) {
@@ -174,28 +77,17 @@ function Uploader(options) {
     this._files = [];
 
     /**
+     * 正在上传的文件列表.
+     *
+     * @type {Object.<string, File>}
+     */
+    this._uploadingFiles = {};
+
+    /**
      * 是否被中断了，比如 this.stop
      * @type {boolean}
      */
     this._abort = false;
-
-    /**
-     * 记录从 start 开始已经上传的字节数.
-     * @type {number}
-     */
-    this._loadedBytes = 0;
-
-    /**
-     * 记录队列中总文件的大小, UploadComplete 之后会被清零
-     * @type {number}
-     */
-    this._totalBytes = 0;
-
-    /**
-     * 记录开始上传的时间.
-     * @type {number}
-     */
-    this._startTime = 0;
 
     /**
      * 是否处于上传的过程中，也就是正在处理 this._files 队列的内容.
@@ -209,18 +101,11 @@ function Uploader(options) {
      */
     this._xhr2Supported = utils.isXhr2Supported();
 
-    /**
-     * @type {Object.<string, *>}
-     */
-    this._policyMap = {};
+    this._policyManager = null;
+    this._networkInfo = new NetworkInfo();
 
     this._init();
 }
-
-Uploader.prototype._resetChunkSize = function (chunkSize) {
-    // TODO
-    return chunkSize;
-};
 
 Uploader.prototype._getCustomizedSignature = function (uptokenUrl) {
     var options = this.options;
@@ -328,7 +213,7 @@ Uploader.prototype._init = function () {
         fileInput.onchange = u.bind(this._onFilesAdded, this);
         fileInput.onready = function () {
             self._initEvents();
-            self._invoke(kPostInit);
+            self._invoke(events.kPostInit);
         };
 
         fileInput.init();
@@ -336,15 +221,13 @@ Uploader.prototype._init = function () {
 
     var promise = sdk.Q.resolve();
 
-    promise.then(function () {
-        if (self._xhr2Supported
-            && !options.bos_credentials
-            && options.uptoken_url
-            && options.get_new_uptoken === false) {
-            return self._initStsToken();
-        }
-    }).then(function (payload) {
-        if (payload) {
+    var stsMode = self._xhr2Supported
+        && !options.bos_credentials
+        && options.uptoken_url
+        && options.get_new_uptoken === false;
+    if (stsMode) {
+        var stm = new StsTokenManager(options);
+        promise = stm.get(options.bos_bucket).then(function (payload) {
             // 重新初始化一个 sdk.BosClient
             options.bos_credentials = {
                 ak: payload.AccessKeyId,
@@ -356,8 +239,10 @@ Uploader.prototype._init = function () {
                 credentials: options.bos_credentials,
                 sessionToken: options.uptoken
             });
-        }
-    }).then(function () {
+        });
+    }
+
+    promise.then(function () {
         if (options.bos_credentials) {
             self.client.createSignature = function (_, httpMethod, path, params, headers) {
                 var credentials = _ || this.config.credentials;
@@ -375,39 +260,14 @@ Uploader.prototype._init = function () {
         if (self._xhr2Supported) {
             // 对于不支持 xhr2 的情况，会在 onready 的时候去触发事件
             self._initEvents();
-            self._invoke(kPostInit);
+            self._invoke(events.kPostInit);
         }
+
+        self._policyManager = new PolicyManager(options);
     }).catch(function (error) {
         debug(error);
-        self._invoke(kError, [error]);
+        self._invoke(events.kError, [error]);
     });
-};
-
-Uploader.prototype._initPolicySignature = function (bucketPolicy) {
-    var options = this.options;
-    var uptoken_url = options.uptoken_url;
-    var timeout = options.uptoken_jsonp_timeout;
-
-    var deferred = sdk.Q.defer();
-    $.ajax({
-        url: uptoken_url,
-        jsonp: 'callback',
-        dataType: 'jsonp',
-        timeout: timeout,
-        data: {
-            policy: JSON.stringify(bucketPolicy)
-        },
-        success: function (payload) {
-            // payload.policy (base64)
-            // payload.signature
-            // payload.accessKey
-            deferred.resolve(payload);
-        },
-        error: function () {
-            deferred.reject(new Error('Get policy signature timeout (' + timeout + 'ms).'));
-        }
-    });
-    return deferred.promise;
 };
 
 Uploader.prototype._initEvents = function () {
@@ -460,34 +320,6 @@ Uploader.prototype._initEvents = function () {
     }
 };
 
-Uploader.prototype._initStsToken = function () {
-    var uptoken_url = this.options.uptoken_url;
-    var bucket = this.options.bos_bucket;
-    var timeout = this.options.uptoken_jsonp_timeout;
-
-    var deferred = sdk.Q.defer();
-    $.ajax({
-        url: uptoken_url,
-        jsonp: 'callback',
-        dataType: 'jsonp',
-        timeout: timeout,
-        data: {
-            sts: JSON.stringify(utils.getDefaultACL(bucket))
-        },
-        success: function (payload) {
-            // payload.AccessKeyId
-            // payload.SecretAccessKey
-            // payload.SessionToken
-            // payload.Expiration
-            deferred.resolve(payload);
-        },
-        error: function () {
-            deferred.reject(new Error('Get sts token timeout (' + timeout + 'ms).'));
-        }
-    });
-    return deferred.promise;
-};
-
 Uploader.prototype._filterFiles = function (candidates) {
     var self = this;
 
@@ -496,7 +328,7 @@ Uploader.prototype._filterFiles = function (candidates) {
 
     var files = u.filter(candidates, function (file) {
         if (maxFileSize > 0 && file.size > maxFileSize) {
-            self._invoke(kFileFiltered, [file]);
+            self._invoke(events.kFileFiltered, [file]);
             return false;
         }
 
@@ -506,10 +338,11 @@ Uploader.prototype._filterFiles = function (candidates) {
         return true;
     });
 
-    return this._invoke(kFilesFilter, [files]) || files;
+    return this._invoke(events.kFilesFilter, [files]) || files;
 };
 
 Uploader.prototype._onFilesAdded = function (e) {
+    var self = this;
     var files = e.target.files;
     if (!files) {
         // IE7, IE8 低版本浏览器的处理
@@ -520,11 +353,21 @@ Uploader.prototype._onFilesAdded = function (e) {
     }
     files = this._filterFiles(files);
     if (u.isArray(files) && files.length) {
-        this._invoke(kFilesAdded, [files]);
-        this._totalBytes += u.reduce(files, function (previous, item) {
+        this._networkInfo.totalBytes += u.reduce(files, function (previous, item) {
+            // 这里是 abort 的默认实现，开始上传的时候，会改成另外的一种实现方式
+            // 默认的实现是为了支持在没有开始上传之前，也可以取消上传的需求
+            item.abort = function () {
+                item._aborted = true;
+                self._invoke(events.kAborted, [null, item]);
+            };
+
+            // 内部的 uuid，外部也可以使用，比如 remove(item.uuid) / remove(item)
+            item.uuid = utils.uuid();
+
             return previous + item.size;
         }, 0);
         this._files.push.apply(this._files, files);
+        this._invoke(events.kFilesAdded, [files]);
     }
 
     if (this.options.auto_start) {
@@ -558,23 +401,31 @@ Uploader.prototype._onUploadProgress = function (e, httpContext) {
         ? e.loaded / e.total
         : 0;
 
-    this._loadedBytes += (e.loaded - file._previousLoaded);
-    this._invoke(kNetworkSpeed, [
-        this._loadedBytes,
-        utils.now() - this._startTime,
-        this._totalBytes - this._loadedBytes
-    ]);
+    this._networkInfo.loadedBytes += (e.loaded - file._previousLoaded);
+    this._invoke(events.kNetworkSpeed, this._networkInfo.dump());
     file._previousLoaded = e.loaded;
 
-    var eventType = kUploadProgress;
+    var eventType = events.kUploadProgress;
     if (args.params.partNumber && args.params.uploadId) {
         // IE6,7,8,9下面不会有partNumber和uploadId
         // 此时的 file 是 slice 的结果，可能没有自定义的属性
         // 比如 demo 里面的 __id, __mediaId 之类的
-        eventType = kUploadPartProgress;
+        eventType = events.kUploadPartProgress;
     }
 
     this._invoke(eventType, [file, progress, e]);
+};
+
+Uploader.prototype.remove = function (item) {
+    if (typeof item === 'string') {
+        item = this._uploadingFiles[item] || u.find(this._files, function (file) {
+            return file.uuid === item;
+        });
+    }
+
+    if (item && typeof item.abort === 'function') {
+        item.abort();
+    }
 };
 
 Uploader.prototype.start = function () {
@@ -587,22 +438,22 @@ Uploader.prototype.start = function () {
     if (this._files.length) {
         this._working = true;
         this._abort = false;
-        this._startTime = utils.now();
-        this._loadedBytes = 0;
+        this._networkInfo.reset();
 
         var taskParallel = this.options.bos_task_parallel;
         utils.eachLimit(this._files, taskParallel,
             function (file, callback) {
                 file._previousLoaded = 0;
                 self._uploadNext(file).fin(function () {
+                    delete self._uploadingFiles[file.uuid];
                     callback(null, file);
                 });
             },
             function (error) {
                 self._working = false;
                 self._files.length = 0;
-                self._totalBytes = 0;
-                self._invoke(kUploadComplete);
+                self._networkInfo.totalBytes = 0;
+                self._invoke(events.kUploadComplete);
             });
     }
 };
@@ -612,464 +463,17 @@ Uploader.prototype.stop = function () {
     this._working = false;
 };
 
-/**
- * 如果已经上传完毕了，返回 undefined
- *
- * @return {File|undefined}
- */
-Uploader.prototype._getNext = function () {
-    return this._files.shift();
-};
-
-Uploader.prototype._guessContentType = function (file, opt_ignoreCharset) {
-    var contentType = file.type;
-    if (true || !contentType) {
-        var object = file.name;
-        var ext = object.split(/\./g).pop();
-        contentType = sdk.MimeType.guess(ext);
-    }
-
-    // Firefox在POST的时候，Content-Type 一定会有Charset的，因此
-    // 这里不管3721，都加上.
-    if (!opt_ignoreCharset && !/charset=/.test(contentType)) {
-        contentType += '; charset=UTF-8';
-    }
-
-    return contentType;
-};
-
-
-Uploader.prototype._getBucketPolicy = function (bucket) {
-    var self = this;
-    var options = self.options;
-
-    var payload = self._policyMap[bucket];
-
-    if (payload != null) {
-        return sdk.Q.resolve(payload);
-    }
-
-    var bucketPolicy = utils.getDefaultPolicy(bucket);
-    if (options.bos_credentials && !options.uptoken) {
-        // 如果没有 options.uptoken，说明不是 临时 ak 和 sk
-        var credentials = options.bos_credentials;
-        var auth = new sdk.Auth(credentials.ak, credentials.sk);
-        var policyBase64 = new Buffer(JSON.stringify(bucketPolicy)).toString('base64');
-        var policySignature = auth.hash(policyBase64, credentials.sk);
-        var policyAccessKey = credentials.ak;
-        payload = {
-            policy: policyBase64,
-            signature: policySignature,
-            accessKey: policyAccessKey
-        };
-        self._policyMap[bucket] = payload;
-        return sdk.Q.resolve(payload);
-    }
-
-    return self._initPolicySignature(bucketPolicy)
-        .then(function (payload) {
-            self._policyMap[bucket] = payload;
-            return payload;
-        });
-};
-
-Uploader.prototype._uploadNextViaPostObject = function (file, bucket, object) {
-    var self = this;
-    var config = this.client.config;
-
-    return this._getBucketPolicy(bucket)
-        .then(function (payload) {
-            var url = config.endpoint.replace(/^(https?:\/\/)/, '$1' + bucket + '.');
-
-            var fields = {
-                'Content-Type': self._guessContentType(file, true),
-                'key': object,
-                'policy': payload.policy,
-                'signature': payload.signature,
-                'accessKey': payload.accessKey,
-                'success-action-status': '201'
-            };
-
-            return self._sendPostRequest(url, fields, file);
-        })
-        .then(function (response) {
-            response.body.bucket = bucket;
-            response.body.object = object;
-            self._invoke(kFileUploaded, [file, response]);
-        })
-        .catch(function (error) {
-            debug(error);
-            self._invoke(kError, [error, file]);
-        });
-};
-
-Uploader.prototype._sendPostRequest = function (url, fields, file) {
-    var self = this;
-    var deferred = sdk.Q.defer();
-
-    if (typeof mOxie === 'undefined'
-        || !u.isFunction(mOxie.FormData)
-        || !u.isFunction(mOxie.XMLHttpRequest)) {
-        return sdk.Q.reject(new Error('mOxie is undefined.'));
-    }
-
-    var formData = new mOxie.FormData();
-    u.each(fields, function (value, name) {
-        if (value == null) {
-            return;
-        }
-        formData.append(name, value);
-    });
-    formData.append('file', file);
-
-    var xhr = new mOxie.XMLHttpRequest();
-    xhr.onload = function (e) {
-        if (xhr.status >= 200 && xhr.status < 300) {
-            deferred.resolve({
-                http_headers: {},
-                body: {}
-            });
-        }
-        else {
-            deferred.reject(new Error('Invalid response statusCode ' + xhr.status));
-        }
-    };
-    xhr.onerror = function (error) {
-        deferred.reject(error);
-    };
-    if (xhr.upload) {
-        xhr.upload.onprogress = function (e) {
-            var progress = e.loaded / e.total;
-            self._loadedBytes += (e.loaded - file._previousLoaded);
-            file._previousLoaded = e.loaded;
-            self._invoke(kNetworkSpeed, [
-                self._loadedBytes,
-                utils.now() - self._startTime,
-                self._totalBytes - self._loadedBytes
-            ]);
-            self._invoke(kUploadProgress, [file, progress, null]);
-        };
-    }
-    xhr.open('POST', url, true);
-    xhr.send(formData, {
-        runtime_order: 'flash',
-        swf_url: self.options.flash_swf_url
-    });
-
-    return deferred.promise;
-};
-
-
-Uploader.prototype._uploadNextViaMultipart = function (file, bucket, object, metas) {
-    var contentType = this._guessContentType(file);
-    var options = {'Content-Type': contentType};
-
-    var self = this;
-    var uploadId = null;
-    var multipartParallel = this.options.bos_multipart_parallel;
-    var chunkSize = this.options.chunk_size;
-
-    return this._initiateMultipartUpload(file, chunkSize, bucket, object, options)
-        .then(function (response) {
-            uploadId = response.body.uploadId;
-            var parts = response.body.parts || [];
-            // 准备 uploadParts
-            var deferred = sdk.Q.defer();
-            var tasks = utils.getTasks(file, uploadId, chunkSize, bucket, object);
-            utils.filterTasks(tasks, parts);
-
-            var loaded = parts.length;
-            // 这个用来记录整体 Parts 的上传进度，不是单个 Part 的上传进度
-            // 单个 Part 的上传进度可以监听 kUploadPartProgress 来得到
-            var state = {
-                lengthComputable: true,
-                loaded: loaded,
-                total: tasks.length
-            };
-            if (loaded) {
-                self._invoke(kUploadProgress, [file, loaded / tasks.length, null]);
-            }
-
-            async.mapLimit(tasks, multipartParallel, self._uploadPart(state),
-                function (err, results) {
-                    if (err) {
-                        deferred.reject(err);
-                    }
-                    else {
-                        deferred.resolve(results);
-                    }
-                });
-
-            return deferred.promise;
-        })
-        .then(function (responses) {
-            // 因为mOxie的限制，无法获取 Response Headers 的 ETag，因此
-            // 这里调用一下 listParts 的接口
-            if (!self._xhr2Supported) {
-                // 如果分片超过了1000个，实际上是存在问题的
-                return self._listAllParts(bucket, object, uploadId)
-                    .then(function (payload) {
-                        var parts = payload.body.parts;
-                        var eTagMap = {};
-                        for (var i = 0; i < parts.length; i++) {
-                            var part = parts[i];
-                            var partNumber = part.partNumber;
-                            var eTag = part.eTag;
-                            eTagMap[partNumber] = eTag;
-                        }
-                        for (i = 0; i < responses.length; i++) {
-                            var item = responses[i];
-                            eTag = eTagMap['' + (i + 1)];
-                            if (eTag) {
-                                item.http_headers.etag = eTag;
-                            }
-                        }
-                        return responses;
-                    });
-            }
-            return responses;
-        })
-        .then(function (responses) {
-            var partList = [];
-            u.each(responses, function (response, index) {
-                partList.push({
-                    partNumber: index + 1,
-                    eTag: response.http_headers.etag
-                });
-            });
-            // 全部上传结束后删除localStorage
-            self._generateLocalKey({
-                blob: file,
-                chunkSize: chunkSize,
-                bucket: bucket,
-                object: object
-            }).then(function (key) {
-                utils.removeUploadId(key);
-            });
-            return self.client.completeMultipartUpload(bucket, object, uploadId, partList, metas);
-        })
-        .then(function (response) {
-            self._invoke(kUploadProgress, [file, 1]);
-
-            response.body.bucket = bucket;
-            response.body.object = object;
-
-            self._invoke(kFileUploaded, [file, response]);
-        })
-        .catch(function (error) {
-            self._invoke(kError, [error, file]);
-        });
-};
-
-Uploader.prototype._generateLocalKey = function (options) {
-    var generator = this.options.bos_multipart_local_key_generator;
-    return utils.generateLocalKey(options, generator);
-};
-
-Uploader.prototype._initiateMultipartUpload = function (file, chunkSize, bucket, object, options) {
-    var self = this;
-    var uploadId;
-    var localSaveKey;
-
-    function initNewMultipartUpload() {
-        return self.client.initiateMultipartUpload(bucket, object, options)
-            .then(function (response) {
-                if (localSaveKey) {
-                    utils.setUploadId(localSaveKey, response.body.uploadId);
-                }
-
-                response.body.parts = [];
-                return response;
-            });
-    }
-
-    var keyOptions = {
-        blob: file,
-        chunkSize: chunkSize,
-        bucket: bucket,
-        object: object
-    };
-    var promise = this.options.bos_multipart_auto_continue
-        ? this._generateLocalKey(keyOptions)
-        : sdk.Q.resolve(null);
-
-    return promise.then(function (key) {
-            localSaveKey = key;
-            if (!localSaveKey) {
-                return initNewMultipartUpload();
-            }
-
-            uploadId = utils.getUploadId(localSaveKey);
-            if (!uploadId) {
-                return initNewMultipartUpload();
-            }
-
-            return self._listParts(file, bucket, object, uploadId);
-        })
-        .then(function (response) {
-            if (uploadId && localSaveKey) {
-                var parts = response.body.parts;
-                // listParts 的返回结果
-                self._invoke(kUploadResume, [file, parts, null]);
-                response.body.uploadId = uploadId;
-            }
-            return response;
-        })
-        .catch(function (error) {
-            if (uploadId && localSaveKey) {
-                // 如果获取已上传分片失败，则重新上传。
-                self._invoke(kUploadResumeError, [file, error, null]);
-                utils.removeUploadId(localSaveKey);
-                return initNewMultipartUpload();
-            }
-            throw error;
-        });
-};
-
-Uploader.prototype._listParts = function (file, bucket, object, uploadId) {
-    var self = this;
-    var localParts = this._invoke(kListParts, [file, uploadId]);
-
-    return sdk.Q.resolve(localParts)
-        .then(function (parts) {
-            if (u.isArray(parts) && parts.length) {
-                return {
-                    http_headers: {},
-                    body: {
-                        parts: parts
-                    }
-                };
-            }
-
-            // 如果返回的不是数组，就调用 listParts 接口从服务器获取数据
-            return self._listAllParts(bucket, object, uploadId);
-        });
-};
-
-Uploader.prototype._listAllParts = function (bucket, object, uploadId) {
-    // isTruncated === true / false
-    var self = this;
-    var deferred = sdk.Q.defer();
-
-    var parts = [];
-    var payload = null;
-    var maxParts = 1000;          // 每次的分页
-    var partNumberMarker = 0;     // 分隔符
-
-    function listParts() {
-        var options = {
-            maxParts: maxParts,
-            partNumberMarker: partNumberMarker
-        };
-        self.client.listParts(bucket, object, uploadId, options)
-            .then(function (response) {
-                if (payload == null) {
-                    payload = response;
-                }
-
-                parts.push.apply(parts, response.body.parts);
-                partNumberMarker = response.body.nextPartNumberMarker;
-
-                if (response.body.isTruncated === false) {
-                    // 结束了
-                    payload.body.parts = parts;
-                    deferred.resolve(payload);
-                }
-                else {
-                    // 递归调用
-                    listParts();
-                }
-            })
-            .catch(function (error) {
-                deferred.reject(error);
-            });
-    }
-    listParts();
-
-    return deferred.promise;
-};
-
-Uploader.prototype._uploadPart = function (state) {
-    var self = this;
-
-    function uploadPartInner(item, opt_maxRetries) {
-        if (item.etag) {
-            self._loadedBytes += item.partSize;
-
-            // 跳过已上传的part
-            return sdk.Q.resolve({
-                http_headers: {
-                    etag: item.etag
-                },
-                body: {}
-            });
-        }
-        var maxRetries = opt_maxRetries == null
-            ? self.options.max_retries
-            : opt_maxRetries;
-
-        var blob = item.file.slice(item.start, item.stop + 1);
-        blob._previousLoaded = 0;
-        return self.client.uploadPartFromBlob(item.bucket, item.object, item.uploadId,
-            item.partNumber, item.partSize, blob)
-            .then(function (response) {
-                ++state.loaded;
-                var progress = state.loaded / state.total;
-                self._invoke(kUploadProgress, [item.file, progress, null]);
-
-                var result = {
-                    uploadId: item.uploadId,
-                    partNumber: item.partNumber,
-                    partSize: item.partSize,
-                    bucket: item.bucket,
-                    object: item.object,
-                    offset: item.start,
-                    total: blob.size,
-                    response: response
-                };
-                self._invoke(kChunkUploaded, [item.file, result]);
-
-                return response;
-            })
-            .catch(function (error) {
-                if (maxRetries > 0) {
-                    // 还有重试的机会
-                    return uploadPartInner(item, maxRetries - 1);
-                }
-                // 没有机会重试了 :-(
-                throw error;
-            });
-
-    }
-
-    return function (item, callback) {
-        // file: file,
-        // uploadId: uploadId,
-        // bucket: bucket,
-        // object: object,
-        // partNumber: partNumber,
-        // partSize: partSize,
-        // start: offset,
-        // stop: offset + partSize - 1
-
-        var resolve = function (response) {
-            callback(null, response);
-        };
-        var reject = function (error) {
-            callback(error);
-        };
-
-        uploadPartInner(item).then(resolve, reject);
-    };
-};
-
 Uploader.prototype._uploadNext = function (file) {
     if (this._abort) {
         this._working = false;
         return sdk.Q.resolve();
     }
 
-    var returnValue = this._invoke(kBeforeUpload, [file]);
+    if (file._aborted === true) {
+        return sdk.Q.resolve();
+    }
+
+    var returnValue = this._invoke(events.kBeforeUpload, [file]);
     if (returnValue === false) {
         return sdk.Q.resolve();
     }
@@ -1080,9 +484,16 @@ Uploader.prototype._uploadNext = function (file) {
     var object = file.name;
     var throwErrors = true;
 
+    var defaultTaskOptions = u.pick(options,
+        'flash_swf_url', 'max_retries', 'chunk_size',
+        'bos_multipart_parallel',
+        'bos_multipart_auto_continue',
+        'bos_multipart_local_key_generator'
+    );
+
     return sdk.Q.all([
-        this._invoke(kKey, [file], throwErrors),
-        this._invoke(kObjectMetas, [file])
+        this._invoke(events.kKey, [file], throwErrors),
+        this._invoke(events.kObjectMetas, [file])
     ]).then(function (array) {
         var result = array[0];
         var objectMetas = array[1];
@@ -1099,162 +510,54 @@ Uploader.prototype._uploadNext = function (file) {
             multipart = result.multipart || multipart;
         }
 
+        var client = self.client;
+        var eventDispatcher = self;
+        var taskOptions = u.extend(defaultTaskOptions, {
+            file: file,
+            bucket: bucket,
+            object: object,
+            metas: objectMetas
+        });
+
+        var task = null;
         if (!self._xhr2Supported) {
-            return self._uploadNextViaPostObject(file, bucket, object);
+            task = new PostObjectTask(client, eventDispatcher, taskOptions);
+            task.setPolicyManager(self._policyManager);
+        }
+        else if (options.bos_appendable === true) {
+            task = new AppendObjectTask(client, eventDispatcher, taskOptions);
+        }
+        else if (multipart === 'auto' && file.size > options.bos_multipart_min_size) {
+            task = new MultipartTask(client, eventDispatcher, taskOptions);
+        }
+        else {
+            task = new PutObjectTask(client, eventDispatcher, taskOptions);
         }
 
-        if (options.bos_appendable === true) {
-            return self._uploadNextViaAppendObject(file, bucket, object, objectMetas);
-        }
+        self._uploadingFiles[file.uuid] = file;
 
-        var multipartMinSize = options.bos_multipart_min_size;
-        if (multipart === 'auto' && file.size > multipartMinSize) {
-            return self._uploadNextViaMultipart(file, bucket, object, objectMetas);
-        }
+        file.abort = function () {
+            file._aborted = true;
+            return task.abort();
+        };
 
-        return self._uploadNextViaPutObject(file, bucket, object, objectMetas);
+        task.setNetworkInfo(self._networkInfo);
+        return task.start();
     });
 };
 
-Uploader.prototype._getObjectMetadata = function (bucket, object) {
-    return this.client.getObjectMetadata(bucket, object)
-        .catch(function (error) {
-            if (error.status_code === 404) {
-                // 文件不存在，可以上传一个新的了
-                return {
-                    http_headers: {
-                        'content-length': 0,
-                        'x-bce-next-append-offset': 0,
-                        'x-bce-object-type': 'Appendable'
-                    },
-                    body: {}
-                };
-            }
-
-            throw error;
-        });
-};
-
-Uploader.prototype._uploadNextViaAppendObject = function (file, bucket, object, metas) {
-    // 调用 getObjectMeta 接口获取 x-bce-next-append-offset 和 x-bce-object-type
-    // 如果 x-bce-object-type 不是 "Appendable"，那么就不支持断点续传了
-    var self = this;
-    var options = this.options;
-    var contentType = this._guessContentType(file);
-
-    return this._getObjectMetadata(bucket, object)
-        .then(function (response) {
-            var httpHeaders = response.http_headers;
-            var appendable = utils.isAppendable(httpHeaders);
-            if (!appendable) {
-                // Normal Object 不能切换为 Appendable Object
-                self._invoke(kUploadProgress, [file, 1, null]);
-                return sdk.Q.resolve();
-            }
-
-            var contentLength = +(httpHeaders['content-length']);
-            if (contentLength >= file.size) {
-                // 服务端的文件不小于本地，就没必要上传了
-                self._invoke(kUploadProgress, [file, 1, null]);
-                return sdk.Q.resolve();
-            }
-
-            // offset 和 content-length 应该是一样大小的吧？
-            var offset = +httpHeaders['x-bce-next-append-offset'];
-
-            // 上传进度
-            var progress = file.size <= 0 ? 0 : offset / file.size;
-            self._invoke(kUploadProgress, [file, progress, null]);
-
-            // 排除了 offset 之后，按照 chunk_size 切分文件
-            // XXX 一般来说，如果启用了 (bos_appendable)，就可以考虑把 chunk_size 设置为一个比较小的值
-            var chunkSize = options.chunk_size;
-            var tasks = utils.getAppendableTasks(file.size, offset, chunkSize);
-
-            var deferred = sdk.Q.defer();
-            async.mapLimit(tasks, 1,
-                function (item, callback) {
-                    var offset = item.start;
-                    var offsetArgument = offset > 0 ? offset : null;
-                    var blob = file.slice(offset, item.stop + 1);
-                    var resolve = function (response) {
-                        var progress = (item.stop + 1) / file.size;
-                        self._invoke(kUploadProgress, [file, progress, null]);
-                        callback(null, response);
-                    };
-                    var reject = function (error) {
-                        callback(error);
-                    };
-                    var options = u.extend({
-                        'Content-Type': contentType,
-                        'Content-Length': item.partSize
-                    }, metas);
-                    self.client.appendObjectFromBlob(bucket, object,
-                        blob, offsetArgument, options).then(resolve, reject);
-                },
-                function (err, results) {
-                    if (err) {
-                        deferred.reject(err);
-                    }
-                    else {
-                        deferred.resolve(results);
-                    }
-                });
-            return deferred.promise;
-        })
-        .then(function () {
-            var response = {
-                http_headers: {},
-                body: {
-                    bucket: bucket,
-                    object: object
-                }
-            };
-            self._invoke(kFileUploaded, [file, response]);
-        })
-        .catch(function (error) {
-            self._invoke(kError, [error, file]);
-            return sdk.Q.resolve();
-        });
-};
-
-Uploader.prototype._uploadNextViaPutObject = function (file, bucket, object, metas, opt_maxRetries) {
-    var contentType = this._guessContentType(file);
-    var options = u.extend({'Content-Type': contentType}, metas);
-
-    var self = this;
-    var maxRetries = opt_maxRetries == null
-        ? this.options.max_retries
-        : opt_maxRetries;
-
-    return this.client.putObjectFromBlob(bucket, object, file, options)
-        .then(function (response) {
-            self._invoke(kUploadProgress, [file, 1]);
-
-            response.body.bucket = bucket;
-            response.body.object = object;
-            self._invoke(kFileUploaded, [file, response]);
-        })
-        .catch(function (error) {
-            self._invoke(kError, [error, file]);
-            if (error.status_code && error.code && error.request_id) {
-                // 应该是正常的错误(比如签名异常)，这种情况就不要重试了
-                return sdk.Q.resolve();
-            }
-            // else if (error.status_code === 0) {
-            //    // 可能是断网了，safari 触发 online/offline 延迟比较久
-            //    // 我们推迟一下 self._uploadNext() 的时机
-            //    self.pause();
-            //    return;
-            // }
-            else if (maxRetries > 0) {
-                // 还有几乎重试
-                return self._uploadNextViaPutObject(file, bucket, object, metas, maxRetries - 1);
-            }
-
-            // 重试结束了，不管了，继续下一个文件的上传
-            return sdk.Q.resolve();
-        });
+Uploader.prototype.dispatchEvent = function (eventName, eventArguments, throwErrors) {
+    if (eventName === events.kAborted
+        && eventArguments
+        && eventArguments[1]) {
+        var file = eventArguments[1];
+        if (file.size > 0) {
+            var loadedSize = file._previousLoaded || 0;
+            this._networkInfo.totalBytes -= (file.size - loadedSize);
+            this._invoke(events.kNetworkSpeed, this._networkInfo.dump());
+        }
+    }
+    return this._invoke(eventName, eventArguments, throwErrors);
 };
 
 module.exports = Uploader;
