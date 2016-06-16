@@ -67,18 +67,31 @@ function appendLS(key, item) {
   localStorage.setItem(key, JSON.stringify(value));
 }
 
+
 function getUUIDFile(type, file) {
+  var ext = getFileExtension(file);
+
+  return type + '-' + uuid() + (ext ? '.' + ext : '');
+}
+
+function getFileExtension(file) {
   var chunks = file.name.split('.');
   var ext = chunks.length > 1 ? chunks.pop() : '';
 
-  return type + '-' + uuid() + (ext ? '.' + ext : '');
+  return ext;
 }
 
 function finVodKey(file, info) {
   var localKey = getLSIndex('vod', file);
   localStorage.removeItem(localKey);
 
-  vod._internalCreateMediaResource(file.__mediaId, file.name, '测试文件')
+  var options = {};
+  var ext = getFileExtension(file);
+  if (ext) {
+    options.sourceExtension = ext;
+  }
+
+  vod._internalCreateMediaResource(file.__mediaId, file.name, '测试文件', options)
     .then(function () {
       var row = getRowById(file.__id);
       row.setMediaId(file.__mediaId);
@@ -175,8 +188,7 @@ function getBosKey(file) {
 }
 
 function getKey(file) {
-  var chunks = file.name.split('.');
-  var ext = chunks.length > 1 ? chunks.pop() : '';
+  var ext = getFileExtension(file);
 
   if (ext && VOD_EXTS.indexOf(ext) != -1) {
     // 往视频服务上传
