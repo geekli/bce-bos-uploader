@@ -209,6 +209,8 @@ var uploader = new baidubce.bos.Uploader({
   multi_selection: true,
   bos_endpoint: BOS_ENDPOINT,
   bos_bucket: BOS_BUCKET,
+  bos_multipart_parallel: 5,
+  chunk_size: '8mb',
 
   bos_ak: AK,
   bos_sk: SK,
@@ -218,7 +220,7 @@ var uploader = new baidubce.bos.Uploader({
   // 需要通过这个 URL 来动态计算 policy 签名
   uptoken_url: UPTOKEN_URL,
 
-  max_file_size: '1Gb',
+  max_file_size: '50Gb',
   chunk_size: CHUNK_SIZE,
   flash_swf_url: '../bower_components/moxie/bin/flash/Moxie.swf',
   init: {
