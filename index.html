@@ -72,7 +72,7 @@
           <form class="form-inline">
             <div class="form-group">
               <span class="btn btn-default btn-file">
-                <span class="glyphicon glyphicon-paperclip"></span> 选择1Gb以内的文件
+                <span class="glyphicon glyphicon-paperclip"></span> 选择10Gb以内的文件
                 <input type="file" id="file" />
               </span>
               <button type="submit" class="btn btn-success" disabled>开始上传</button>
@@ -193,9 +193,10 @@
       multi_selection: true,
       bos_bucket: 'bce-bos-uploader',
       bos_endpoint: 'http://bj.bcebos.com',
+      bos_multipart_parallel: 5,
       uptoken_url: 'https://ack.efe.tech',
       get_new_uptoken: false,
-      max_file_size: '1Gb',
+      max_file_size: '10Gb',
       flash_swf_url: 'bower_components/moxie/bin/flash/Moxie.swf',
       init: {
         FilesFilter: function (_, files) {
