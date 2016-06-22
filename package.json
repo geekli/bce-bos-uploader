@@ -13,6 +13,9 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "baidubce-sdk": "0.0.22"
+    "async": "^2.0.0-rc.6",
+    "baidubce-sdk": "0.0.22",
+    "humanize": "0.0.9",
+    "jquery": "^3.0.0"
   }
 }

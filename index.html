@@ -8,7 +8,14 @@
     <!--[if lt IE 8]><script src="bower_components/json3/lib/json3.min.js"></script><![endif]-->
     <!--[if lt IE 9]><script src="bower_components/js-polyfills/es5.js"></script><![endif]-->
     <!--[if lt IE 10]><script src="bower_components/moxie/bin/js/moxie.min.js"></script><![endif]-->
-    <script src="bower_components/jquery/dist/jquery.min.js"></script>
+    <script>
+    if (typeof window.process !== 'undefined' && typeof window.require === 'function') {
+        window.$ = window.jQuery = require('jquery');
+    }
+    else {
+        document.write('<script src="bower_components/jquery/dist/jquery.min.js"><' + '\/script>');
+    }
+    </script>
     <script src="bower_components/bce-bos-uploader/bce-bos-uploader.bundle.min.js"></script>
     <script src="bower_components/humanize/humanize.js"></script>
     <style type="text/css">
@@ -57,6 +64,10 @@
     .progress {
         margin-bottom: 0;
         height: 10px;
+    }
+    .progress-bar {
+      -webkit-transition: none;
+      transition: none;
     }
     </style>
   </head>
@@ -112,6 +123,7 @@
     <script>
     var __uuid = 0;
     var __isEmpty = true;
+    var __isApplication = typeof window.process !== 'undefined' && typeof window.require === 'function';
 
     function noop() {
     }
@@ -155,6 +167,9 @@
           else if (ok === false) {
             container.css('color', 'red');
           }
+          else {
+            container.css('color', '#333');
+          }
         },
         setTime: function (time) {
           var container = $('#' + rowId + ' .f-time');
@@ -165,9 +180,13 @@
           var name = container.html();
           container.html('<a href="' + url + '" target="_blank">' + name + '</a>');
         },
-        clearActions: function () {
+        clearActions: function (uuid, force) {
           var container = $('#' + rowId + ' .f-actions');
-          container.html('-');
+          if (!force && __isApplication) {
+            container.html('<a href="javascript:;" data-cmd="download" data-fid="' + uuid + '">下载</a>');
+          } else {
+            container.html('-');
+          }
         },
         setErrorMessage: function (errorMessage) {
           var errorHtml = '<div class="alert alert-danger" role="alert">' + errorMessage + '</div>';
@@ -186,6 +205,67 @@
              '  <div class="progress-bar progress-bar-success progress-bar-striped" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width: 0%">'
              '  </div>' +
              '</div>';
+    }
+
+    function download(fid) {
+      if (!__isApplication) {
+        return;
+      }
+
+      var fileInfo = uploadedInfo[fid];
+      if (!fileInfo) {
+        return;
+      }
+
+      var fs   = require('fs');
+      var path = require('path');
+      var app  = require('remote').require('app')
+      var dstDir = path.join(app.getDataPath(), 'Downloads');
+      if (!fs.existsSync(dstDir)) {
+        fs.mkdirSync(dstDir);
+      }
+
+      var dl = require('./download');
+      var url = fileInfo.url
+      var fileSize = fileInfo.size
+      var fileName = fileInfo.name;
+
+      var row = getRowById(fileInfo.rowId);
+      row.setProgress(0);
+      row.setStatus('circle-arrow-down');
+      row.setTime('-');
+
+      dl.download(url, fileSize, dstDir, fileName, function (progressInfo) {
+        var bytes = progressInfo[0];
+        var time = progressInfo[1];
+        var pendings = progressInfo[2];
+
+        var progress = bytes / (bytes + pendings);
+        row.setProgress(progress);
+
+        var speed = bytes / (time / 1000);
+        var html = '下载速度：' + humanize.filesize(speed) + '/s';
+        var seconds = pendings / speed;
+        if (seconds > 1) {
+          var dhms = baidubce.utils.toDHMS(Math.ceil(seconds));
+          html += '，剩余时间：' + [
+            humanize.pad(dhms.HH, 2, '0'),
+            humanize.pad(dhms.MM, 2, '0'),
+            humanize.pad(dhms.SS, 2, '0')
+          ].join(':');
+        }
+        else if (pendings <= 0) {
+          row.clearActions(fileInfo.uuid, true);
+          row.setStatus('ok-circle', true);
+          row.setTime((time / 1000).toFixed(2));
+        }
+        $('.network-speed').html(html);
+      });
+    }
+
+    var uploadedInfo = {};
+    function saveUploadedFile(uuid, options) {
+      uploadedInfo[uuid] = options;
     }
 
     var uploader = new baidubce.bos.Uploader({
@@ -222,7 +302,13 @@
               $('table tbody').html(html);
               $('table').on('click', '.f-actions a', function (e) {
                 var fid = $(e.target).data('fid');
-                uploader.remove(fid);
+                var cmd = $(e.target).data('cmd');
+                if (cmd === 'abort') {
+                  uploader.remove(fid);
+                }
+                else if (cmd === 'download') {
+                  download(fid);
+                }
               });
             }
             else {
@@ -272,7 +358,14 @@
           row.setStatus('ok-circle', true);
           row.setUrl(url);
           row.setTime(time);
-          row.clearActions();
+          row.clearActions(file.uuid);
+          saveUploadedFile(file.uuid, {
+            rowId: file.__id,
+            uuid: file.uuid,
+            url: url,
+            size: file.size,
+            name: file.name
+          });
           localStorage.removeItem(file.__uploadId);
         },
         NetworkSpeed: function (_, bytes, time, pendings) {
@@ -327,17 +420,16 @@
 
             localStorage.setItem(uploadId, JSON.stringify(parts));
           }
-          console.log(result);
         },
         Aborted: function (_, error, file) {
           var row = getRowById(file.__id);
           row.setStatus('remove-circle', false);
-          row.clearActions();
+          row.clearActions(file.uuid, true);
         },
         Error: function (_, error, file) {
           var row = getRowById(file.__id);
           row.setStatus('remove-circle', false);
-          row.clearActions();
+          row.clearActions(file.uuid, true);
           var errorMessage = $.isPlainObject(error) ? JSON.stringify(error) : String(error);
           row.setErrorMessage(errorMessage);
         }
