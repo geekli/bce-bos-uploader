@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>bce-bos-uploader simple demo</title>
+    <title>百度开放云文件上传演示</title>
     <link rel="stylesheet" type="text/css" href="bower_components/bootstrap/dist/css/bootstrap.min.css" />
     <!--[if lt IE 8]><script src="bower_components/json3/lib/json3.min.js"></script><![endif]-->
     <!--[if lt IE 9]><script src="bower_components/js-polyfills/es5.js"></script><![endif]-->
@@ -69,14 +69,25 @@
       -webkit-transition: none;
       transition: none;
     }
+    .logo {
+      padding: 10px 0;
+      margin: 20px 0;
+      background: url(resources/logo2x.png) left center no-repeat;
+      background-size: 210px;
+      padding-left: 220px;
+    }
+    .logo h2 {
+      margin: 5px 0;
+      font-size: 24px;
+    }
     </style>
   </head>
   <body>
-    <a href="https://github.com/leeight/bce-bos-uploader"><img style="position: absolute; top: 0; right: 0; border: 0;" src="forkme_right_gray.png" alt="Fork me on GitHub" data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_right_gray_6d6d6d.png"></a>
+    <a id="forkme" href="https://github.com/leeight/bce-bos-uploader"><img style="position: absolute; top: 0; right: 0; border: 0;" src="forkme_right_gray.png" alt="Fork me on GitHub" data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_right_gray_6d6d6d.png"></a>
     <div class="container">
       <div class="row">
         <div class="col-md-12">
-          <h2>bce-bos-uploader demo</h2>
+          <div class="logo"><h2>文件上传演示</h2></div>
           <div class="alert alert-warning" role="alert">
             文件自动上传到 bce-bos-uploader 这个bucket，后台会定期清理，请勿上传重要文件。
           </div>
@@ -124,6 +135,11 @@
     var __uuid = 0;
     var __isEmpty = true;
     var __isApplication = typeof window.process !== 'undefined' && typeof window.require === 'function';
+
+    if (__isApplication) {
+      $('.alert').hide();
+      $('#forkme').hide();
+    }
 
     function noop() {
     }
@@ -219,10 +235,10 @@
 
       var fs   = require('fs');
       var path = require('path');
-      var app  = require('remote').require('app')
-      var dstDir = path.join(app.getDataPath(), 'Downloads');
+      var app  = require('electron').remote.app;
+      var dstDir = path.join(app.getPath('userData'), 'Downloads');
       if (!fs.existsSync(dstDir)) {
-        fs.mkdirSync(dstDir);
+        require('mkdirp').sync(dstDir);
       }
 
       var dl = require('./download');

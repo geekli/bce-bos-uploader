@@ -2,3 +2,5 @@ node_modules
 reserved.json
 .idea
 512M.bin
+/releases
+/dist
