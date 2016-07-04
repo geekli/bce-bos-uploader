@@ -192,6 +192,9 @@
           container.html(time);
         },
         setUrl: function (url) {
+          if (__isApplication) {
+            return;
+          }
           var container = $('#' + rowId + ' .f-name');
           var name = container.html();
           container.html('<a href="' + url + '" target="_blank">' + name + '</a>');
@@ -233,18 +236,34 @@
         return;
       }
 
-      var fs   = require('fs');
+      var fs = require('fs');
       var path = require('path');
-      var app  = require('electron').remote.app;
-      var dstDir = path.join(app.getPath('userData'), 'Downloads');
-      if (!fs.existsSync(dstDir)) {
-        require('mkdirp').sync(dstDir);
-      }
-
+      var electron = require('electron');
       var dl = require('./download');
+
+      var dialog = electron.remote.dialog;
+      var app = electron.remote.app;
+
       var url = fileInfo.url
       var fileSize = fileInfo.size
       var fileName = fileInfo.name;
+
+      var dialogOptions = {
+        defaultPath: fileName,
+        title: '保存' + fileName
+      };
+
+      var rv = dialog.showSaveDialog(dialogOptions);
+      if (!rv) {
+        return;
+      }
+
+      var dstDir = path.dirname(rv);
+      fileName = path.basename(fileName);
+
+      if (!fs.existsSync(dstDir)) {
+        require('mkdirp').sync(dstDir);
+      }
 
       var row = getRowById(fileInfo.rowId);
       row.setProgress(0);

@@ -19,7 +19,7 @@ var nativeUrl = require('url');
 var async = require('async');
 var humanize = require('humanize');
 
-const CHUNK_SIZE = 5 * 1024 * 1024;    // 5M
+const CHUNK_SIZE = 10 * 1024 * 1024;    // 10MB
 
 function download(url, fileSize, dstDir, fileName, callback) {
   var tasks = getTasks(url, fileSize, dstDir, fileName);
@@ -27,11 +27,17 @@ function download(url, fileSize, dstDir, fileName, callback) {
   var loadedBytes = 0;
   var totalBytes = fileSize;
   var startTime = Date.now();
+  var lastTickTime = Date.now();
   function progressNotifier(bytes) {
     loadedBytes += bytes;
     var time = Date.now() - startTime;
     var pendings = totalBytes - loadedBytes;
 
+    if (Date.now() - lastTickTime < 100) {
+      return;
+    }
+
+    lastTickTime = Date.now();
     callback([
       loadedBytes,
       time,
@@ -39,13 +45,24 @@ function download(url, fileSize, dstDir, fileName, callback) {
     ]);
   }
 
-  async.mapLimit(tasks, 10, downloadPart(progressNotifier), function (err, results) {
+  // 创建临时文件
+  var fd = fs.openSync(path.join(dstDir, fileName), 'w');
+  var buffer = new Buffer(fileSize);
+  buffer.fill(0);
+  fs.write(fd, buffer, 0, fileSize, function (err, written, buffer) {
     if (err) {
       console.error(err);
+      return;
     }
-    else {
-      callback([fileSize, Date.now() - startTime, 0]);
-    }
+
+    async.mapLimit(tasks, 10, downloadPart(progressNotifier), function (err, results) {
+      if (err) {
+        console.error(err);
+      }
+      else {
+        callback([fileSize, Date.now() - startTime, 0]);
+      }
+    });
   });
 }
 
@@ -85,14 +102,18 @@ function downloadPart(progressNotifier) {
       }
     };
     var request = http.request(requestOptions, function (response) {
-      var payload = [];
+      var stream = fs.createWriteStream(path.join(item.dstDir, item.fileName), {
+        flags: 'r+',
+        start: item.offset,
+        autoClose: true,
+      });
+
       response.on('data', function (chunk) {
         progressNotifier(chunk.length);
-        payload.push(chunk);
+        stream.write(chunk);
       });
-      response.on('end', function () {
-        var dst = path.join(item.dstDir, item.partNumber + '.' + item.partSize + '.' + item.fileName);
-        fs.writeFile(dst, Buffer.concat(payload), callback);
+      response.on('end', function (chunk) {
+        stream.end(chunk, callback);
       });
     });
     request.on('error', callback);
@@ -116,6 +137,7 @@ function getTasks(url, fileSize, dstDir, fileName) {
       fileName: fileName,
       partNumber: partNumber,
       partSize: partSize,
+      offset: offset,
       range: 'bytes=' + offset + '-' + (offset + partSize - 1)
     });
 
@@ -127,12 +149,17 @@ function getTasks(url, fileSize, dstDir, fileName) {
   return tasks;
 }
 
-/*
+//*
 var url = 'http://bce-bos-uploader.bceimg.com/2016/06/22/100M.rar';
+// var url = 'http://bce-bos-uploader.bceimg.com/2016/07/04/1M.avi';
+// var url = 'http://bce-bos-uploader.bceimg.com/2016/07/04/19M.rar';
+// var url = 'http://bce-bos-uploader.bceimg.com/2016/07/04/hello.txt';
 var dstDir = path.join(__dirname, 'dst');
 var fileName = path.basename(url);
-download(url, 100 * 1024 * 1024, dstDir, fileName);
-*/
+download(url, 100 * 1024 * 1024, dstDir, fileName, function (state) {
+  console.log(state);
+});
+//*/
 
 
 exports.download = download;
