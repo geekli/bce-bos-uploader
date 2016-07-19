@@ -11,11 +11,11 @@
  * specific language governing permissions and limitations under the License.
  */
 
-var AK = getQuery('ak', 'afe4759592064eee930682e399249aba');
-var SK = getQuery('sk', '7785ea912b06449f8cbd084998a1e400');
+var AK = getQuery('ak', '07e08ee9530d400f83ff8a82a30d5f71');
+var SK = getQuery('sk', 'fde2d76826f244738e9924c66796b3a8');
 var DOC_ENDPOINT = getQuery('doc.endpoint', 'http://doc.baidubce.com');
 var BOS_ENDPOINT = getQuery('bos.endpoint', 'http://bj.bcebos.com');
-var BOS_BUCKET = getQuery('bos.bucket', 'bkt-gawizxekph7vrnmb');
+var BOS_BUCKET = getQuery('bos.bucket', 'bce-bos-uploader');
 var CHUNK_SIZE = '1m';
 
 var doc = new baidubce.sdk.DocClient.Document({

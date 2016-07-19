@@ -11,8 +11,8 @@
  * specific language governing permissions and limitations under the License.
  */
 
-var AK = getQuery('ak', 'afe4759592064eee930682e399249aba');
-var SK = getQuery('sk', '7785ea912b06449f8cbd084998a1e400');
+var AK = getQuery('ak', '07e08ee9530d400f83ff8a82a30d5f71');
+var SK = getQuery('sk', 'fde2d76826f244738e9924c66796b3a8');
 
 // 如果使用临时 AK 和 SK，必须设置 SESSION_TOKEN 和 UPTOKEN_URL 这两个参数
 // **缺一不可**
@@ -20,14 +20,14 @@ var SESSION_TOKEN = null;
 var UPTOKEN_URL = 'http://localhost.baidu.com:7788/ack';
 
 var VOD_ENDPOINT = getQuery('vod.endpoint', 'http://vod.baidubce.com');
-var VOD_BUCKET = getQuery('vod.bucket', 'vod-gauddsywyhn713kc');
+var VOD_BUCKET = getQuery('vod.bucket', 'bce-bos-uploader');
 var VOD_EXTS = 'avi,mp4,flv,rm,rmvb,webm'.split(',');
 
 var BOS_ENDPOINT = getQuery('bos.endpoint', 'http://bj.bcebos.com');
-var BOS_BUCKET = 'eduyun';
+var BOS_BUCKET = 'bce-bos-uploader';
 
 var DOC_ENDPOINT = getQuery('doc.endpoint', 'http://doc.baidubce.com');
-var DOC_BUCKET = getQuery('doc.bucket', 'bkt-gawizxekph7vrnmb');
+var DOC_BUCKET = getQuery('doc.bucket', 'bce-bos-uploader');
 var DOC_EXTS = 'txt,pdf,doc,docx,ppt,pptx,xls,xlsx'.split(',');
 var DOC_MAX_SIZE = baidubce.utils.parseSize('100Mb');   // 文档最大 100Mb
 
@@ -419,7 +419,7 @@ $('#view-docs-modal').on('shown.bs.modal', function (e) {
         '<tr>'
         + '<td>' + (i + 1) + '</td>'
         + '<td class="doc-name">' + (title) + '<br/>' + doc.documentId + '</td>'
-        + '<td>' + humanize.filesize(doc.meta.sizeInBytes) + '</td>'
+        + '<td>' + (doc.publishInfo ? humanize.filesize(doc.publishInfo.sizeInBytes) : '-') + '</td>'
         + '<td>' + (doc.status) + '</td>'
         + '<td>' + (doc.createTime) + '</td>'
         + '<td>' + (doc.publishTime || '-') + '</td>'
