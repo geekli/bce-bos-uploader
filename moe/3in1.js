@@ -214,11 +214,11 @@ var uploader = new baidubce.bos.Uploader({
 
   bos_ak: AK,
   bos_sk: SK,
-  uptoken: SESSION_TOKEN,
+  // uptoken: SESSION_TOKEN,
 
   // IE下面的 PostObject 请求不能用临时 ak 和 sk, 因此
   // 需要通过这个 URL 来动态计算 policy 签名
-  uptoken_url: UPTOKEN_URL,
+  // uptoken_url: UPTOKEN_URL,
 
   max_file_size: '50Gb',
   chunk_size: CHUNK_SIZE,
