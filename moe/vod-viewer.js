@@ -11,11 +11,11 @@
  * specific language governing permissions and limitations under the License.
  */
 
-var AK = getQuery('ak', 'afe4759592064eee930682e399249aba');
-var SK = getQuery('sk', '7785ea912b06449f8cbd084998a1e400');
+var AK = getQuery('ak', '07e08ee9530d400f83ff8a82a30d5f71');
+var SK = getQuery('sk', 'fde2d76826f244738e9924c66796b3a8');
 var VOD_ENDPOINT = getQuery('vod.endpoint', 'http://vod.baidubce.com');
 
-var vod = new baidubce.sdk.VodClient({
+var vod = new baidubce.sdk.VodClient.Player({
   endpoint: VOD_ENDPOINT,
   credentials: {ak: AK, sk: SK}
 });
@@ -26,9 +26,30 @@ if (!mediaId) {
   alert('No mediaId found.');
 }
 else {
-  vod.getPlayerCode(mediaId, 800, 500, true).then(function (response) {
+  vod.setMediaId(mediaId).code({width: 800, height: 500, autostart: true, ak: AK}).then(function (response) {
     var codes = response.body.codes;
-    location.replace(codes[2].sourceCode);
+    var codesMap = {};
+    for (var i = 0; i < codes.length; i++) {
+      codesMap[codes[i].codeType] = codes[i].sourceCode;
+    }
+
+    if (!codesMap['file'] || !codesMap['cover']) {
+      $('#player').html('file or cover is undefined.');
+      return;
+    }
+
+    cyberplayer('player').setup({
+        width: 800,
+        height: 500,
+        file: codesMap['file'],
+        image: codesMap['cover'],
+        autostart: true,
+        stretching: "uniform",
+        repeat: false,
+        volume: 100,
+        controls: true,
+        ak: AK
+    });
   });
 }
 

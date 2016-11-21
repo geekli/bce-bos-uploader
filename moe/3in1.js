@@ -39,7 +39,7 @@ var doc = new baidubce.sdk.DocClient.Document({
   sessionToken: SESSION_TOKEN
 });
 
-var vod = new baidubce.sdk.VodClient({
+var vod = new baidubce.sdk.VodClient.Media({
   endpoint: VOD_ENDPOINT,
   credentials: {ak: AK, sk: SK},
   sessionToken: SESSION_TOKEN
@@ -85,13 +85,15 @@ function finVodKey(file, info) {
   var localKey = getLSIndex('vod', file);
   localStorage.removeItem(localKey);
 
-  var options = {};
+  var options = {
+    description: '测试文件'
+  };
   var ext = getFileExtension(file);
   if (ext) {
     options.sourceExtension = ext;
   }
 
-  vod._internalCreateMediaResource(file.__mediaId, file.name, '测试文件', options)
+  vod.setMediaId(file.__mediaId).process(file.name, options)
     .then(function () {
       var row = getRowById(file.__id);
       row.setMediaId(file.__mediaId);
@@ -104,7 +106,7 @@ function getVodKey(file) {
   var localKey = getLSIndex('vod', file);
   var localValue = localStorage.getItem(localKey);
   if (!localValue) {
-    return vod.buildRequest('POST', null, 'apply').then(function (response) {
+    return vod.apply().then(function (response) {
       var mediaId = response.body.mediaId;
       var bucket = response.body.sourceBucket;
       var key = response.body.sourceKey;
@@ -349,7 +351,7 @@ $('#view-vods-modal').on('shown.bs.modal', function (e) {
 
   $('#vods .empty').text('查询中...');
   var tasks = mediaIds.map(function (mediaId) {
-    return vod.getMediaResource(mediaId);
+    return vod.setMediaId(mediaId).get();
   });
   baidubce.sdk.Q.all(tasks).then(function (responses) {
     var medias = responses.map(function (response) {
