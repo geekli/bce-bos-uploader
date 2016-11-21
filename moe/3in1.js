@@ -414,8 +414,7 @@ $('#view-docs-modal').on('shown.bs.modal', function (e) {
       var doc = documents[i];
       // doc.docId -> 文档阅读ID，仅当文档状态为PUBLISHED时返回该字段
       var title = doc.status === 'PUBLISHED'
-        ? '<a target="_blank" href="doc-viewer.html?id=' + doc.documentId +
-          '&title=' + encodeURIComponent(doc.title) + '">' + doc.title + '</a>'
+        ? '<a target="_blank" href="http://static.bcedocument.com/reader/v2/console/index.html?docId=' + doc.documentId + '&token=TOKEN&host=BCEDOC&enviroment=online">' + doc.title + '</a>'
         : doc.title;
       html.push(
         '<tr>'
