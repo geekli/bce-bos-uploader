@@ -27,7 +27,7 @@ PolicyManager.prototype.get = function (bucket) {
     var self = this;
 
     if (self._cache[bucket] != null) {
-        return self._cache[bucket];
+        return sdk.Q.resolve(self._cache[bucket]);
     }
 
     return sdk.Q.resolve(this._getImpl(bucket)).then(function (payload) {

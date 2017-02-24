@@ -49,6 +49,9 @@ PostObjectTask.prototype.start = function (opt_maxRetries) {
 
     return this._policyManager.get(bucket)
         .then(function (payload) {
+            // 因为 FLASH 会自动请求 /crossdomain.xml，所以我们需要把
+            // http://bj.bcebos.com/<bucket>/ 的上传请求改成
+            // http://<bucket>.bj.bcebos.com
             var url = config.endpoint.replace(/^(https?:\/\/)/, '$1' + bucket + '.');
 
             var fields = {

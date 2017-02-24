@@ -315,8 +315,14 @@ Uploader.prototype._initEvents = function () {
         this.client.sendHTTPRequest = u.bind(utils.fixXhr(this.options, true), this.client);
 
         // 自动修复一些其它 XXXClient 发送请求的接口
-        sdk.VodClient.prototype.sendHTTPRequest = utils.fixXhr(this.options);
         sdk.DocClient.Document.prototype.sendHTTPRequest = utils.fixXhr(this.options);
+        sdk.VodClient.prototype.sendHTTPRequest = utils.fixXhr(this.options);
+        if (typeof sdk.VodClient.Media === 'function') {
+            sdk.VodClient.Media.prototype.sendHTTPRequest = utils.fixXhr(this.options);
+        }
+        if (typeof sdk.VodClient.Player === 'function') {
+            sdk.VodClient.Player.prototype.sendHTTPRequest = utils.fixXhr(this.options);
+        }
     }
 };
 
