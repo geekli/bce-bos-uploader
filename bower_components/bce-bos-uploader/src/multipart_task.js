@@ -24,6 +24,12 @@ var Task = require('./task');
 
 function MultipartTask() {
     Task.apply(this, arguments);
+
+    /**
+     * 批量上传的时候，保存的 xhrRequesting 对象
+     * 如果需要 abort 的时候，从这里来获取
+     */
+    this.xhrPools = [];
 }
 utils.inherits(MultipartTask, Task);
 
@@ -269,10 +275,11 @@ MultipartTask.prototype._uploadPart = function (state) {
         var blob = item.file.slice(item.start, item.stop + 1);
         blob._previousLoaded = 0;
 
-        self.xhrRequesting = self.client.uploadPartFromBlob(item.bucket, item.object,
+        var uploadPartXhr = self.client.uploadPartFromBlob(item.bucket, item.object,
             item.uploadId, item.partNumber, item.partSize, blob);
+        var xhrPoolIndex = self.xhrPools.push(uploadPartXhr);
 
-        return self.xhrRequesting.then(function (response) {
+        return uploadPartXhr.then(function (response) {
                 ++state.loaded;
                 var progress = state.loaded / state.total;
                 dispatcher.dispatchEvent(events.kUploadProgress, [item.file, progress, null]);
@@ -288,6 +295,9 @@ MultipartTask.prototype._uploadPart = function (state) {
                     response: response
                 };
                 dispatcher.dispatchEvent(events.kChunkUploaded, [item.file, result]);
+
+                // 不用删除，设置为 null 就好了，反正 abort 的时候会判断的
+                self.xhrPools[xhrPoolIndex - 1] = null;
 
                 return response;
             })
@@ -323,12 +333,19 @@ MultipartTask.prototype._uploadPart = function (state) {
     };
 };
 
+/**
+ * 终止上传任务
+ */
+MultipartTask.prototype.abort = function () {
+    this.aborted = true;
+    this.xhrRequesting = null;
+    for (var i = 0; i < this.xhrPools.length; i++) {
+        var xhr = this.xhrPools[i];
+        if (xhr && typeof xhr.abort === 'function') {
+            xhr.abort();
+        }
+    }
+};
+
 
 module.exports = MultipartTask;
-
-
-
-
-
-
-

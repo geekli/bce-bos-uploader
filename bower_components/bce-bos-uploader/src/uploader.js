@@ -192,6 +192,52 @@ Uploader.prototype._init = function () {
         tracker.init(options.tracker_id);
     }
 
+    var btnElement = $(options.browse_button);
+    var nodeName = btnElement.prop('nodeName');
+    if (nodeName !== 'INPUT') {
+        var elementContainer = btnElement;
+
+        // 如果本身不是 <input type="file" />，自动追加一个上去
+        // 1. options.browse_button 后面追加一个元素 <div><input type="file" /></div>
+        // 2. btnElement.parent().css('position', 'relative');
+        // 3. .bce-bos-uploader-input-container 用来自定义自己的样式
+        var width = elementContainer.outerWidth();
+        var height = elementContainer.outerHeight();
+
+        var inputElementContainer = $('<div class="bce-bos-uploader-input-container"><input type="file" /></div>');
+        inputElementContainer.css({
+            'position': 'absolute',
+            'top': 0, 'left': 0,
+            'width': width, 'height': height,
+            'overflow': 'hidden',
+            // 如果支持 xhr2，把 input[type=file] 放到按钮的下面，通过主动调用 file.click() 触发
+            // 如果不支持xhr2, 把 input[type=file] 放到按钮的上面，通过用户主动点击 input[type=file] 触发
+            'z-index': this._xhr2Supported ? 99 : 100
+        });
+        inputElementContainer.find('input').css({
+            'position': 'absolute',
+            'top': 0, 'left': 0,
+            'width': '100%', 'height': '100%',
+            'font-size': '999px',
+            'opacity': 0
+        });
+        elementContainer.css({
+            'position': 'relative',
+            'z-index': this._xhr2Supported ? 100 : 99
+        });
+        elementContainer.after(inputElementContainer);
+        elementContainer.parent().css('position', 'relative');
+
+        // 把 browse_button 修改为当前生成的那个元素
+        options.browse_button = inputElementContainer.find('input');
+
+        if (this._xhr2Supported) {
+            elementContainer.click(function () {
+                options.browse_button.click();
+            });
+        }
+    }
+
     var self = this;
     if (!this._xhr2Supported
         && typeof mOxie !== 'undefined'
