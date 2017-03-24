@@ -70,7 +70,7 @@ PutObjectTask.prototype.start = function (opt_maxRetries) {
         //    self.pause();
         //    return;
         // }
-        else if (maxRetries > 0) {
+        else if (maxRetries > 0 && !self.aborted) {
             // 还有机会重试
             return self.start(maxRetries - 1);
         }

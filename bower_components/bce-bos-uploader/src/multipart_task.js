@@ -302,7 +302,7 @@ MultipartTask.prototype._uploadPart = function (state) {
                 return response;
             })
             .catch(function (error) {
-                if (maxRetries > 0) {
+                if (maxRetries > 0 && !self.aborted) {
                     // 还有重试的机会
                     return uploadPartInner(item, maxRetries - 1);
                 }
