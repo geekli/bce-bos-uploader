@@ -335,17 +335,22 @@ exports.expandAccept = function (accept) {
     }
 
     // 为了保证兼容性，把 mimeTypes 和 exts 都返回回去
-    var mimeTypes = u.uniq(u.map(exts, function (ext) {
+    exts = u.map(exts, function (ext) {
+        return /^\./.test(ext) ? ext : ('.' + ext);
+    });
+
+    return exts.join(',');
+};
+
+exports.extToMimeType = function (exts) {
+    var mimeTypes = u.uniq(u.map(exts.split(','), function (ext) {
         if (ext.indexOf('/') !== -1) {
             return ext;
         }
         return sdk.MimeType.guess(ext);
     }));
-    exts = u.filter(exts, function (ext) {
-        return ext.indexOf('/') === -1;
-    });
 
-    return mimeTypes.concat(exts).join(',');
+    return mimeTypes.join(',');
 };
 
 exports.expandAcceptToArray = function (accept) {

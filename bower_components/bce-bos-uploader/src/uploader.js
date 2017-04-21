@@ -312,7 +312,16 @@ Uploader.prototype._initEvents = function () {
 
         var accept = options.accept;
         if (accept != null) {
-            btn.attr('accept', utils.expandAccept(accept));
+            // Safari 只支持 mime-type
+            // Chrome 支持 mime-type 和 exts
+            // Firefox 只支持 exts
+            // NOTE: exts 必须有 . 这个前缀，例如 .txt 是合法的，txt 是不合法的
+            var exts = utils.expandAccept(accept);
+            var isSafari = /Safari/.test(navigator.userAgent) && /Apple Computer/.test(navigator.vendor);
+            if (isSafari) {
+                exts = utils.extToMimeType(exts);
+            }
+            btn.attr('accept', exts);
         }
 
         if (options.dir_selection) {
