@@ -65,13 +65,14 @@ PolicyManager.prototype._getFromLocal = function (bucketPolicy, credentials) {
 PolicyManager.prototype._getFromRemote = function (bucketPolicy) {
     var options = this.options;
     var uptoken_url = options.uptoken_url;
-    var timeout = options.uptoken_jsonp_timeout;
+    var timeout = options.uptoken_timeout || options.uptoken_jsonp_timeout;
+    var viaJsonp = options.uptoken_via_jsonp;
 
     var deferred = sdk.Q.defer();
     $.ajax({
         url: uptoken_url,
-        jsonp: 'callback',
-        dataType: 'jsonp',
+        jsonp: viaJsonp ? 'callback' : false,
+        dataType: viaJsonp ? 'jsonp' : 'json',
         timeout: timeout,
         data: {
             policy: JSON.stringify(bucketPolicy)

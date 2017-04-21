@@ -38,14 +38,16 @@ StsTokenManager.prototype.get = function (bucket) {
 };
 
 StsTokenManager.prototype._getImpl = function (bucket) {
-    var uptoken_url = this.options.uptoken_url;
-    var timeout = this.options.uptoken_jsonp_timeout;
+    var options = this.options;
+    var uptoken_url = options.uptoken_url;
+    var timeout = options.uptoken_timeout || options.uptoken_jsonp_timeout;
+    var viaJsonp = options.uptoken_via_jsonp;
 
     var deferred = sdk.Q.defer();
     $.ajax({
         url: uptoken_url,
-        jsonp: 'callback',
-        dataType: 'jsonp',
+        jsonp: viaJsonp ? 'callback' : false,
+        dataType: viaJsonp ? 'jsonp' : 'json',
         timeout: timeout,
         data: {
             sts: JSON.stringify(utils.getDefaultACL(bucket))

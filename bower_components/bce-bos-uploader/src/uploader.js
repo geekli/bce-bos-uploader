@@ -109,7 +109,8 @@ function Uploader(options) {
 
 Uploader.prototype._getCustomizedSignature = function (uptokenUrl) {
     var options = this.options;
-    var timeout = options.uptoken_jsonp_timeout;
+    var timeout = options.uptoken_timeout || options.uptoken_jsonp_timeout;
+    var viaJsonp = options.uptoken_via_jsonp;
 
     return function (_, httpMethod, path, params, headers) {
         if (/\bed=([\w\.]+)\b/.test(location.search)) {
@@ -123,8 +124,8 @@ Uploader.prototype._getCustomizedSignature = function (uptokenUrl) {
         var deferred = sdk.Q.defer();
         $.ajax({
             url: uptokenUrl,
-            jsonp: 'callback',
-            dataType: 'jsonp',
+            jsonp: viaJsonp ? 'callback' : false,
+            dataType: viaJsonp ? 'jsonp' : 'json',
             timeout: timeout,
             data: {
                 httpMethod: httpMethod,
@@ -265,28 +266,9 @@ Uploader.prototype._init = function () {
         fileInput.init();
     }
 
-    var promise = sdk.Q.resolve();
-
-    var stsMode = self._xhr2Supported
-        && !options.bos_credentials
-        && options.uptoken_url
-        && options.get_new_uptoken === false;
-    if (stsMode) {
-        var stm = new StsTokenManager(options);
-        promise = stm.get(options.bos_bucket).then(function (payload) {
-            // 重新初始化一个 sdk.BosClient
-            options.bos_credentials = {
-                ak: payload.AccessKeyId,
-                sk: payload.SecretAccessKey
-            };
-            options.uptoken = payload.SessionToken;
-            self.client = new sdk.BosClient({
-                endpoint: utils.normalizeEndpoint(options.bos_endpoint),
-                credentials: options.bos_credentials,
-                sessionToken: options.uptoken
-            });
-        });
-    }
+    var promise = options.bos_credentials
+        ? sdk.Q.resolve()
+        : self.refreshStsToken();
 
     promise.then(function () {
         if (options.bos_credentials) {
@@ -515,6 +497,69 @@ Uploader.prototype.stop = function () {
     this._working = false;
 };
 
+/**
+ * 动态设置 Uploader 的某些参数，当前只支持动态的修改
+ * bos_credentials, uptoken, bos_bucket, bos_endpoint
+ * bos_ak, bos_sk
+ *
+ * @param {Object} options 用户动态设置的参数（只支持部分）
+ */
+Uploader.prototype.setOptions = function (options) {
+    var supportedOptions = u.pick(options, 'bos_credentials',
+        'bos_ak', 'bos_sk', 'uptoken', 'bos_bucket', 'bos_endpoint');
+    this.options = u.extend(this.options, supportedOptions);
+
+    var config = this.client && this.client.config;
+    if (config) {
+        var credentials = null;
+
+        if (options.bos_credentials) {
+            credentials = options.bos_credentials;
+        }
+        else if (options.bos_ak && options.bos_sk) {
+            credentials = {
+                ak: options.bos_ak,
+                sk: options.bos_sk
+            };
+        }
+
+        if (credentials) {
+            this.options.bos_credentials = credentials;
+            config.credentials = credentials;
+        }
+        if (options.uptoken) {
+            config.sessionToken = options.uptoken;
+        }
+        if (options.bos_endpoint) {
+            config.endpoint = utils.normalizeEndpoint(options.bos_endpoint);
+        }
+    }
+};
+
+/**
+ * 有的用户希望主动更新 sts token，避免过期的问题
+ *
+ * @return {Promise}
+ */
+Uploader.prototype.refreshStsToken = function () {
+    var self = this;
+    var options = self.options;
+    var stsMode = self._xhr2Supported
+        && options.uptoken_url
+        && options.get_new_uptoken === false;
+    if (stsMode) {
+        var stm = new StsTokenManager(options);
+        return stm.get(options.bos_bucket).then(function (payload) {
+            return self.setOptions({
+                bos_ak: payload.AccessKeyId,
+                bos_sk: payload.SecretAccessKey,
+                uptoken: payload.SessionToken
+            });
+        });
+    }
+    return sdk.Q.resolve();
+};
+
 Uploader.prototype._uploadNext = function (file) {
     if (this._abort) {
         this._working = false;
@@ -525,14 +570,25 @@ Uploader.prototype._uploadNext = function (file) {
         return sdk.Q.resolve();
     }
 
-    var returnValue = this._invoke(events.kBeforeUpload, [file]);
+    var throwErrors = true;
+    var returnValue = this._invoke(events.kBeforeUpload, [file], throwErrors);
     if (returnValue === false) {
         return sdk.Q.resolve();
     }
 
     var self = this;
+    return sdk.Q.resolve(returnValue)
+        .then(function () {
+            return self._uploadNextImpl(file);
+        })
+        .catch(function (error) {
+            self._invoke(events.kError, [error, file]);
+        });
+};
+
+Uploader.prototype._uploadNextImpl = function (file) {
+    var self = this;
     var options = this.options;
-    var bucket = options.bos_bucket;
     var object = file.name;
     var throwErrors = true;
 
@@ -542,11 +598,13 @@ Uploader.prototype._uploadNext = function (file) {
         'bos_multipart_auto_continue',
         'bos_multipart_local_key_generator'
     );
-
     return sdk.Q.all([
         this._invoke(events.kKey, [file], throwErrors),
         this._invoke(events.kObjectMetas, [file])
     ]).then(function (array) {
+        // options.bos_bucket 可能会被 kKey 事件动态的改变
+        var bucket = options.bos_bucket;
+
         var result = array[0];
         var objectMetas = array[1];
 
