@@ -5,19 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>百度开放云文件上传演示</title>
     <link rel="stylesheet" type="text/css" href="bower_components/bootstrap/dist/css/bootstrap.min.css" />
-    <!--[if lt IE 8]><script src="bower_components/json3/lib/json3.min.js"></script><![endif]-->
-    <!--[if lt IE 9]><script src="bower_components/js-polyfills/es5.js"></script><![endif]-->
     <!--[if lt IE 10]><script src="bower_components/moxie/bin/js/moxie.min.js"></script><![endif]-->
-    <script>
-    if (typeof window.process !== 'undefined' && typeof window.require === 'function') {
-        window.$ = window.jQuery = require('jquery');
-    }
-    else {
-        document.write('<script src="bower_components/jquery/dist/jquery.min.js"><' + '\/script>');
-    }
-    </script>
-    <script src="bower_components/bce-bos-uploader/bce-bos-uploader.bundle.min.js"></script>
+    <script src="bower_components/jquery/dist/jquery.min.js"></script>
     <script src="bower_components/humanize/humanize.js"></script>
+    <script src="https://bce.bdstatic.com/bce-bos-uploader-lite/1.0.4/bce-bos-uploader-lite.min.js"></script>
     <style type="text/css">
     .empty,
     .f-status {
@@ -55,8 +46,8 @@
         margin: 0;
     }
     tr.ignored {
-        text-decoration: line-through;
-        color: gray;
+      text-decoration: line-through;
+      color: gray;
     }
     .table > tbody > tr > td.f-progress {
         vertical-align: middle;
@@ -82,7 +73,7 @@
     </style>
   </head>
   <body>
-    <a id="forkme" href="https://github.com/leeight/bce-bos-uploader"><img style="position: absolute; top: 0; right: 0; border: 0;" src="forkme_right_gray.png" alt="Fork me on GitHub" data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_right_gray_6d6d6d.png"></a>
+    <a id="forkme" href="https://github.com/leeight/bce-bos-uploader-lite"><img style="position: absolute; top: 0; right: 0; border: 0;" src="forkme_right_gray.png" alt="Fork me on GitHub" data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_right_gray_6d6d6d.png"></a>
     <div class="container">
       <div class="row">
         <div class="col-md-12">
@@ -96,6 +87,7 @@
                 <span class="glyphicon glyphicon-paperclip"></span> 选择50Gb以内的文件
                 <input type="file" id="file" />
               </span>
+              <button id="gen-random-file" class="btn btn-default">生成随机文件</button>
               <button type="submit" class="btn btn-success" disabled>开始上传</button>
               <span class="network-speed"></span>
             </div>
@@ -473,6 +465,19 @@
       }
     });
 
+    function getBlob(size) {
+      var data = new Int8Array(size);
+      return new Blob([data], {type: 'text/plain'});
+    }
+
+    $('#gen-random-file').click(function () {
+      var maxSize = Math.pow(2, 20) * 50;   // 50M
+      var size = parseInt(Math.random() * maxSize, 10);
+      var filename = Date.now() + '.txt';
+      var file = new File([getBlob(size)], filename);
+      uploader.addFile(file);
+      return false;
+    });
     $('button[type=submit]').click(function () {
       uploader.start();
       return false;
