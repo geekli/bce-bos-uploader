@@ -69,7 +69,8 @@ function Uploader(options) {
     /**
      * 需要等待上传的文件列表，每次上传的时候，从这里面删除
      * 成功或者失败都不会再放回去了
-     * @param {Array.<File>}
+     *
+     * @type {Array.<File>}
      */
     this._files = [];
 

@@ -24,6 +24,7 @@ var Task = require('./task');
 /**
  * MultipartTask
  *
+ * @constructor
  * @class
  */
 function MultipartTask() {

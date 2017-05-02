@@ -22,8 +22,9 @@
     /**
      * Promise
      *
-     * @param {Function} fn The executor.
+     * @constructor
      * @class
+     * @param {Function} fn The executor.
      */
     function Promise(fn) {
         if (typeof this !== 'object') {
@@ -126,6 +127,7 @@
     /**
      * Handler
      *
+     * @constructor
      * @class
      * @param {*} onFulfilled The onFulfilled.
      * @param {*} onRejected The onRejected.

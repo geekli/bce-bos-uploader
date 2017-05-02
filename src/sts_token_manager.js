@@ -20,6 +20,7 @@ var utils = require('./utils');
 /**
  * StsTokenManager
  *
+ * @constructor
  * @class
  * @param {Object} options The options.
  */

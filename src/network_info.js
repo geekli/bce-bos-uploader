@@ -19,6 +19,7 @@ var utils = require('./utils');
 /**
  * NetworkInfo
  *
+ * @constructor
  * @class
  */
 function NetworkInfo() {

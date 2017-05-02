@@ -6,6 +6,7 @@
 /**
  * EventEmitter
  *
+ * @constructor
  * @class
  */
 function EventEmitter() {

@@ -17,6 +17,7 @@
 /**
  * Queue
  *
+ * @constructor
  * @class
  * @param {*} collection The collection.
  */
