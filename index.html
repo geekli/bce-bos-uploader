@@ -144,7 +144,7 @@
     }
 
     function toUrl(object) {
-      var url = 'http://bce-bos-uploader.bceimg.com/' + encodeURIComponent(object).replace(/%2F/gi, '/');
+      var url = 'http://bce-bos-uploader.cdn.bcebos.com/' + encodeURIComponent(object).replace(/%2F/gi, '/');
       return url;
     }
 
@@ -297,8 +297,8 @@
     var uploader = new baidubce.bos.Uploader({
       browse_button: '#file',
       multi_selection: true,
-      bos_bucket: 'bce-bos-uploader',
-      bos_endpoint: location.protocol + '//bj.bcebos.com',
+      // bos_bucket: 'bce-bos-uploader',
+      bos_endpoint: 'http://bce-bos-uploader.cdn.bcebos.com',
       bos_multipart_parallel: 5,
       chunk_size: '8mb',
       bos_ak: '07e08ee9530d400f83ff8a82a30d5f71',
