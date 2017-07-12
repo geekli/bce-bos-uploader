@@ -383,7 +383,7 @@
         FileUploaded: function (_, file, info) {
           var time = ((new Date().getTime() - file.__startTime) / 1000).toFixed(2);
           var row = getRowById(file.__id);
-          var url = toUrl(info.body.object);
+          var url = toUrl(info.body.key);
           row.setStatus('ok-circle', true);
           row.setUrl(url);
           row.setTime(time);
