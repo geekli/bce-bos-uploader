@@ -4,6 +4,8 @@ bce-bos-uploader 是基于 [bce-sdk-js](https://github.com/baidubce/bce-sdk-js) 
 
 DEMO地址：<http://leeight.github.io/bce-bos-uploader/>
 
+如果对体积有严格的要求，可以考虑使用 [lite 版本](https://github.com/leeight/bce-bos-uploader-lite)
+
 ### 支持的浏览器
 
 1. 基于Xhr2和[File API](http://caniuse.com/#feat=fileapi)，可以支持：IE10+, Firefox/Chrome/Opera 最新版
