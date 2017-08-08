@@ -1,0 +1,488 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Baidu object storage uploader demo</title>
+    <link rel="stylesheet" type="text/css" href="bower_components/bootstrap/dist/css/bootstrap.min.css" />
+    <!--[if lt IE 10]><script src="bower_components/moxie/bin/js/moxie.min.js"></script><![endif]-->
+    <script src="bower_components/jquery/dist/jquery.min.js"></script>
+    <script src="bower_components/humanize/humanize.js"></script>
+    <script src="https://cdn.bdstatic.com/bce-bos-uploader-lite/1.0.4/bce-bos-uploader-lite.min.js"></script>
+    <style type="text/css">
+    .empty,
+    .f-status {
+        text-align: center;
+    }
+    .f-progress {
+        text-align: right;
+    }
+    .btn-file {
+        position: relative;
+        overflow: hidden;
+    }
+    .btn-file input[type=file] {
+        position: absolute;
+        top: 0;
+        right: 0;
+        min-width: 100%;
+        min-height: 100%;
+        font-size: 100px;
+        text-align: right;
+        filter: alpha(opacity=0);
+        opacity: 0;
+        outline: none;
+        background: white;
+        cursor: inherit;
+        display: block;
+    }
+    table th,
+    .f-progress,
+    .f-size {
+        white-space: nowrap;
+    }
+    .f-name .alert-danger {
+        padding: 0 5px;
+        margin: 0;
+    }
+    tr.ignored {
+      text-decoration: line-through;
+      color: gray;
+    }
+    .table > tbody > tr > td.f-progress {
+        vertical-align: middle;
+    }
+    .progress {
+        margin-bottom: 0;
+        height: 10px;
+    }
+    .progress-bar {
+      -webkit-transition: none;
+      transition: none;
+    }
+    .logo {
+      padding: 12px 0;
+      margin: 20px 0;
+      background: url(resources/logo2x.png) left center no-repeat;
+      padding-left: 190px;
+    }
+    .logo h2 {
+      margin: 5px 0;
+      font-size: 24px;
+    }
+    </style>
+  </head>
+  <body>
+    <a id="forkme" href="https://github.com/leeight/bce-bos-uploader-lite"><img style="position: absolute; top: 0; right: 0; border: 0;" src="forkme_right_gray.png" alt="Fork me on GitHub" data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_right_gray_6d6d6d.png"></a>
+    <div class="container">
+      <div class="row">
+        <div class="col-md-12">
+          <div class="logo"><h2>&nbsp;</h2></div>
+          <div class="alert alert-warning" role="alert">
+            The file will be uploaded to bce-bos-uploader bucket.
+          </div>
+          <form class="form-inline">
+            <div class="form-group">
+              <span class="btn btn-default btn-file">
+                <span class="glyphicon glyphicon-paperclip"></span> Pick file size less than 50Gb
+                <input type="file" id="file" />
+              </span>
+              <button id="gen-random-file" class="btn btn-default">Generate Random File</button>
+              <button type="submit" class="btn btn-success" disabled>Start upload</button>
+              <span class="network-speed"></span>
+            </div>
+          </form>
+          <br />
+          <table class="table table-bordered">
+            <colgroup>
+              <col width="50px" />
+              <col width="50px" />
+              <col width="180px" />
+              <col width="60px" />
+              <col width="100px" />
+              <col width="100px" />
+            </colgroup>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Status</th>
+                <th>Progress</th>
+                <th>File Size</th>
+                <th>Time(s)</th>
+                <th>Operation</th>
+                <th>File Name</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colspan="7" class="empty">Please choose the files...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <script>
+    var __uuid = 0;
+    var __isEmpty = true;
+    var __isApplication = typeof window.process !== 'undefined' && typeof window.require === 'function';
+
+    if (__isApplication) {
+      $('.alert').hide();
+      $('#forkme').hide();
+    }
+
+    function noop() {
+    }
+
+    if (typeof localStorage === 'undefined') {
+      var localStorage = {
+        getItem: noop,
+        setItem: noop,
+        removeItem: noop
+      };
+    }
+
+    function toUrl(object) {
+      var url = 'http://bce-bos-uploader.cdn.bcebos.com/' + encodeURIComponent(object).replace(/%2F/gi, '/');
+      return url;
+    }
+
+    function getIdByName(name) {
+      return 'f' + (__uuid ++);
+    }
+
+    function getRowById(rowId) {
+      return {
+        setIgnore: function (ignored) {
+          if (ignored) {
+            $('#' + rowId).addClass('ignored');
+          }
+          else {
+            $('#' + rowId).removeClass('ignored');
+          }
+        },
+        setProgress: function (progress) {
+          $('#' + rowId + ' .f-progress .progress-bar').css('width', (progress * 100).toFixed(2) + '%');
+        },
+        setStatus: function (type, ok) {
+          var container = $('#' + rowId + ' .f-status');
+          container.html('<span class="glyphicon glyphicon-' + type + '"></span>');
+          if (ok === true) {
+            container.css('color', 'green');
+          }
+          else if (ok === false) {
+            container.css('color', 'red');
+          }
+          else {
+            container.css('color', '#333');
+          }
+        },
+        setTime: function (time) {
+          var container = $('#' + rowId + ' .f-time');
+          container.html(time);
+        },
+        setUrl: function (url) {
+          if (__isApplication) {
+            return;
+          }
+          var container = $('#' + rowId + ' .f-name');
+          var name = container.html();
+          container.html('<a href="' + url + '" target="_blank">' + name + '</a>');
+        },
+        clearActions: function (uuid, force) {
+          var container = $('#' + rowId + ' .f-actions');
+          if (!force && __isApplication) {
+            container.html('<a href="javascript:;" data-cmd="download" data-fid="' + uuid + '">下载</a>');
+          } else {
+            container.html('-');
+          }
+        },
+        setErrorMessage: function (errorMessage) {
+          var errorHtml = '<div class="alert alert-danger" role="alert">' + errorMessage + '</div>';
+          var container = $('#' + rowId + ' .f-name');
+          container.append(errorHtml);
+        }
+      };
+    }
+
+    function getDefaultTextProgress() {
+      return '0.00%';
+    }
+
+    function getDefaultCssProgress() {
+      return '<div class="progress">' +
+             '  <div class="progress-bar progress-bar-success progress-bar-striped" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width: 0%">'
+             '  </div>' +
+             '</div>';
+    }
+
+    function download(fid) {
+      if (!__isApplication) {
+        return;
+      }
+
+      var fileInfo = uploadedInfo[fid];
+      if (!fileInfo) {
+        return;
+      }
+
+      var fs = require('fs');
+      var path = require('path');
+      var electron = require('electron');
+      var dl = require('./download');
+
+      var dialog = electron.remote.dialog;
+      var app = electron.remote.app;
+
+      var url = fileInfo.url
+      var fileSize = fileInfo.size
+      var fileName = fileInfo.name;
+
+      var dialogOptions = {
+        defaultPath: fileName,
+        title: '保存' + fileName
+      };
+
+      var rv = dialog.showSaveDialog(dialogOptions);
+      if (!rv) {
+        return;
+      }
+
+      var dstDir = path.dirname(rv);
+      fileName = path.basename(fileName);
+
+      if (!fs.existsSync(dstDir)) {
+        require('mkdirp').sync(dstDir);
+      }
+
+      var row = getRowById(fileInfo.rowId);
+      row.setProgress(0);
+      row.setStatus('circle-arrow-down');
+      row.setTime('-');
+
+      dl.download(url, fileSize, dstDir, fileName, function (progressInfo) {
+        var bytes = progressInfo[0];
+        var time = progressInfo[1];
+        var pendings = progressInfo[2];
+
+        var progress = bytes / (bytes + pendings);
+        row.setProgress(progress);
+
+        var speed = bytes / (time / 1000);
+        var html = '下载速度：' + humanize.filesize(speed) + '/s';
+        var seconds = pendings / speed;
+        if (seconds > 1) {
+          var dhms = baidubce.utils.toDHMS(Math.ceil(seconds));
+          html += '，剩余时间：' + [
+            humanize.pad(dhms.HH, 2, '0'),
+            humanize.pad(dhms.MM, 2, '0'),
+            humanize.pad(dhms.SS, 2, '0')
+          ].join(':');
+        }
+        else if (pendings <= 0) {
+          row.clearActions(fileInfo.uuid, true);
+          row.setStatus('ok-circle', true);
+          row.setTime((time / 1000).toFixed(2));
+        }
+        $('.network-speed').html(html);
+      });
+    }
+
+    var uploadedInfo = {};
+    function saveUploadedFile(uuid, options) {
+      uploadedInfo[uuid] = options;
+    }
+
+    var uploader = new baidubce.bos.Uploader({
+      browse_button: '#file',
+      multi_selection: true,
+      // bos_bucket: 'bce-bos-uploader',
+      bos_endpoint: 'http://bce-bos-uploader.cdn.bcebos.com',
+      bos_multipart_parallel: 5,
+      chunk_size: '8mb',
+      bos_ak: '07e08ee9530d400f83ff8a82a30d5f71',
+      bos_sk: 'fde2d76826f244738e9924c66796b3a8',
+      // uptoken_url: 'https://ack.efe.tech',
+      // get_new_uptoken: false,
+      max_retries: 2,
+      max_file_size: '50Gb',
+      flash_swf_url: 'bower_components/moxie/bin/flash/Moxie.swf',
+      init: {
+        FilesFilter: function (_, files) {
+          // 添加更多的过滤规则，比如文件大小之类的
+        },
+        FilesAdded: function (_, files) {
+          for (var i = 0; i < files.length; i++) {
+            var file = files[i];
+            var id = getIdByName(file.name);
+            file.__id = id;
+            var html = '<tr id="' + id + '">'
+                       + '<td class="f-id">' + (__uuid) + '</td>'
+                       + '<td class="f-status"><span class="glyphicon glyphicon-record"></span></td>'
+                       + '<td class="f-progress">' + getDefaultCssProgress() + '</td>'
+                       + '<td class="f-size">' + (humanize.filesize(file.size)) + '</td>'
+                       + '<td class="f-time">-</td>'
+                       + '<td class="f-actions"><a href="javascript:;" data-cmd="abort" data-fid="' + file.uuid + '">Cancel</a></td>'
+                       + '<td class="f-name">' + (file.name) + '</td>'
+                       + '</tr>';
+            if (__isEmpty) {
+              __isEmpty = false;
+              $('table tbody').html(html);
+              $('table').on('click', '.f-actions a', function (e) {
+                var fid = $(e.target).data('fid');
+                var cmd = $(e.target).data('cmd');
+                if (cmd === 'abort') {
+                  uploader.remove(fid);
+                }
+                else if (cmd === 'download') {
+                  download(fid);
+                }
+              });
+            }
+            else {
+              $('table tbody').append(html);
+            }
+            $('button[type=submit]').attr('disabled', false);
+          }
+        },
+        BeforeUpload: function (_, file) {
+          file.__startTime = new Date().getTime();
+          var row = getRowById(file.__id);
+          if (/\.(pdf)$/i.test(file.name)) {
+            row.setIgnore(true);
+            return false;
+          }
+          row.setStatus('circle-arrow-up');
+        },
+        UploadProgress: function (_, file, progress, event) {
+          var row = getRowById(file.__id);
+          row.setProgress(progress);
+        },
+        Key: function (_, file) {
+          var date = new Date();
+          var year = date.getFullYear();
+
+          var month = date.getMonth() + 1;
+          if (month < 10) {
+            month = '0' + month;
+          }
+          var day = date.getDate();
+          if (day < 10) {
+            day = '0' + day;
+          }
+
+          var deferred = baidubce.sdk.Q.defer();
+          var delay = ~~(2 + Math.random() * 5);    // (2, 7);
+          setTimeout(function () {
+              var key = year + '/' + month + '/' + day + '/' + file.name;
+              deferred.resolve(key);
+          }, delay * 100);
+          return deferred.promise;
+        },
+        FileUploaded: function (_, file, info) {
+          var time = ((new Date().getTime() - file.__startTime) / 1000).toFixed(2);
+          var row = getRowById(file.__id);
+          var url = toUrl(info.body.key);
+          row.setStatus('ok-circle', true);
+          row.setUrl(url);
+          row.setTime(time);
+          row.clearActions(file.uuid);
+          saveUploadedFile(file.uuid, {
+            rowId: file.__id,
+            uuid: file.uuid,
+            url: url,
+            size: file.size,
+            name: file.name
+          });
+          localStorage.removeItem(file.__uploadId);
+        },
+        NetworkSpeed: function (_, bytes, time, pendings) {
+          var speed = bytes / (time / 1000);
+          var html = 'Speed：' + humanize.filesize(speed) + '/s';
+          var seconds = pendings / speed;
+          if (seconds > 1) {
+            var dhms = baidubce.utils.toDHMS(Math.ceil(seconds));
+            html += '，Left Time：' + [
+              humanize.pad(dhms.HH, 2, '0'),
+              humanize.pad(dhms.MM, 2, '0'),
+              humanize.pad(dhms.SS, 2, '0')
+            ].join(':');
+          }
+
+          $('.network-speed').html(html);
+        },
+        UploadComplete: function () {
+          $('button[type=submit]').attr('disabled', true);
+        },
+        ListParts: function (_, file, uploadId) {
+          // 恢复断点续传的时候，从本地获取 parts 的信息，避免从服务读取
+          // 有时候服务器没有开放读取的权限
+          try {
+            var parts = localStorage.getItem(uploadId);
+            return JSON.parse(parts);
+          }
+          catch (ex) {
+          }
+        },
+        ChunkUploaded: function (_, file, result) {
+          var partNumber = result.partNumber;
+          var uploadId = result.uploadId;
+          var response = result.response;
+          var eTag = response.http_headers.etag;
+
+          file.__uploadId = uploadId;
+
+          if (eTag) {
+            var parts = localStorage.getItem(uploadId);
+            if (!parts) {
+              parts = [];
+            }
+            else {
+              parts = JSON.parse(parts);
+            }
+
+            parts.push({
+              partNumber: partNumber,
+              eTag: eTag
+            });
+
+            localStorage.setItem(uploadId, JSON.stringify(parts));
+          }
+        },
+        Aborted: function (_, error, file) {
+          var row = getRowById(file.__id);
+          row.setStatus('remove-circle', false);
+          row.clearActions(file.uuid, true);
+        },
+        Error: function (_, error, file) {
+          var row = getRowById(file.__id);
+          row.setStatus('remove-circle', false);
+          row.clearActions(file.uuid, true);
+          var errorMessage = $.isPlainObject(error) ? JSON.stringify(error) : String(error);
+          row.setErrorMessage(errorMessage);
+        }
+      }
+    });
+
+    function getBlob(size) {
+      var data = new Int8Array(size);
+      return new Blob([data], {type: 'text/plain'});
+    }
+
+    $('#gen-random-file').click(function () {
+      var maxSize = Math.pow(2, 20) * 50;   // 50M
+      var size = parseInt(Math.random() * maxSize, 10);
+      var filename = Date.now() + '.txt';
+      var file = new File([getBlob(size)], filename);
+      uploader.addFile(file);
+      return false;
+    });
+    $('button[type=submit]').click(function () {
+      uploader.start();
+      return false;
+    });
+    </script>
+  </body>
+</html>
+
