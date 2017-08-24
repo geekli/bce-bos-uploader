@@ -294,6 +294,24 @@
       uploadedInfo[uuid] = options;
     }
 
+    function acceptList(exts) {
+        var isSafari = /Safari/.test(navigator.userAgent) && /Apple Computer/.test(navigator.vendor);
+        if (!isSafari) {
+            return exts;
+        }
+        return [
+            'video/mp4',
+            'video/x-flv',
+            'application/x-troff-msvideo', 'video/avi', 'video/msvideo',
+            'video/x-ms-asf',
+            'video/x-ms-wmv',
+            'video/quicktime',
+            'video/webm',
+            'application/vnd.rn-realmedia',
+            'application/vnd.rn-realmedia-vbr'
+        ].join(',');
+    }
+
     var uploader = new baidubce.bos.Uploader({
       browse_button: '#file',
       multi_selection: true,
@@ -303,6 +321,7 @@
       chunk_size: '8mb',
       bos_ak: '07e08ee9530d400f83ff8a82a30d5f71',
       bos_sk: 'fde2d76826f244738e9924c66796b3a8',
+      accept: acceptList('mp4,flv,avi,asf,wmv,mov,webm,mpeg4,ts,mpg,rm,rmvb,mkv'),
       // uptoken_url: 'https://ack.efe.tech',
       // get_new_uptoken: false,
       max_retries: 2,
