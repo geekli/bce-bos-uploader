@@ -10,6 +10,7 @@
     <script src="bower_components/humanize/humanize.js"></script>
     <script src="https://cdn.bdstatic.com/bce-bos-uploader-lite/1.0.4/bce-bos-uploader-lite.min.js"></script>
     <script src="webuploader/webuploader.js"></script>
+    <script src="http://localhost:8800/get_sts_token"></script>
     <link rel="stylesheet" type="text/css" href="webuploader/webuploader.css" />
     <style type="text/css">
     .empty,
@@ -133,8 +134,9 @@
     </div>
     <script>
     var __isEmpty = true;
-    var AK = '07e08ee9530d400f83ff8a82a30d5f71';
-    var SK = 'fde2d76826f244738e9924c66796b3a8';
+    var AK = G_AK; // '07e08ee9530d400f83ff8a82a30d5f71';
+    var SK = G_SK; // 'fde2d76826f244738e9924c66796b3a8';
+    var SESSION_TOKEN = G_SESSION_TOKEN;
     var BOS_ENDPOINT = 'http://bce-bos-uploader.cdn.bcebos.com';
     var Uploader = WebUploader.Uploader;
 
@@ -180,15 +182,17 @@
         var host = BOS_ENDPOINT.replace(/https?:\/\//, '');
         var timestamp = new Date().getTime() / 1000;
         var expirationInSeconds = 0;
-        var headersToSign = ['x-bce-date', 'host'];
+        var headersToSign = ['x-bce-date', 'host', 'x-bce-security-token'];
         var headers_ = {
             'x-bce-date': xbceDate,
+            'x-bce-security-token': SESSION_TOKEN,
             'host': host
         };
         var authorization = generateAuthorization(method, resource, params, headers_, timestamp, expirationInSeconds, headersToSign);
         var headers = {};
         headers['authorization'] = authorization;
         headers['x-bce-date'] = xbceDate;
+        headers['x-bce-security-token'] = SESSION_TOKEN;
 
         block.file.startAt = Date.now();
         block.options = {
