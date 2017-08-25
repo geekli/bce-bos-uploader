@@ -133,8 +133,9 @@
     </div>
     <script>
     var __isEmpty = true;
-    var AK = '07e08ee9530d400f83ff8a82a30d5f71';
-    var SK = 'fde2d76826f244738e9924c66796b3a8';
+    var UPTOKEN_URL = location.host === 'leeight.github.io'
+        ? 'https://cloud.baidu.com/api/authorization'
+        : 'http://localhost:9888/api/authorization';
     var BOS_ENDPOINT = 'http://bce-bos-uploader.cdn.bcebos.com';
     var Uploader = WebUploader.Uploader;
 
@@ -163,11 +164,18 @@
       return key;
     }
 
-    function generateAuthorization(method, resource, params, headers, timestamp, expirationInSeconds, headersToSign) {
-      var auth = new baidubce.sdk.Auth(AK, SK);
-      return auth.generateAuthorization(method, resource, params, headers, timestamp, expirationInSeconds, headersToSign);
+    function generateAuthorization(method, resource, params, headers) {
+      return $.ajax({
+        url: UPTOKEN_URL,
+        dataType: 'jsonp',
+        data: {
+          httpMethod: method,
+          path: resource,
+          queries: JSON.stringify(params || {}),
+          headers: JSON.stringify(headers || {})
+        }
+      });
     }
-
 
     Uploader.register({
       name: 'bos',  // 随便取个名字，后续要禁用或者卸载这个扩充(hook)，需要用到这个名字。
@@ -178,32 +186,29 @@
         var params = {};
         var xbceDate = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
         var host = BOS_ENDPOINT.replace(/https?:\/\//, '');
-        var timestamp = new Date().getTime() / 1000;
-        var expirationInSeconds = 0;
-        var headersToSign = ['x-bce-date', 'host'];
         var headers_ = {
-            'x-bce-date': xbceDate,
-            'host': host
-        };
-        var authorization = generateAuthorization(method, resource, params, headers_, timestamp, expirationInSeconds, headersToSign);
-        var headers = {};
-        headers['authorization'] = authorization;
-        headers['x-bce-date'] = xbceDate;
-
-        block.file.startAt = Date.now();
-        block.options = {
-          method: 'put',
-          server: BOS_ENDPOINT + resource,
-          headers: headers
+          'x-bce-date': xbceDate,
+          'host': host
         };
 
-        var deferred = WebUploader.Deferred();
+        return generateAuthorization(method, resource, params, headers_).then(function (response) {
+          if (response.statusCode !== 200) {
+            throw new Error('generateAuthorization failed');
+          }
 
-        setTimeout(function() {
-          deferred.resolve(block);
-        }, 2000);
+          var headers = {};
+          headers['authorization'] = response.signature;
+          headers['x-bce-date'] = xbceDate;
 
-        return deferred.promise();
+          block.file.startAt = Date.now();
+          block.options = {
+            method: 'put',
+            server: BOS_ENDPOINT + resource,
+            headers: headers
+          };
+
+          return block;
+        });
       }
     });
 

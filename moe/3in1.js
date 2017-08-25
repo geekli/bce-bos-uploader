@@ -12,12 +12,15 @@
  */
 
 var AK = getQuery('ak', '07e08ee9530d400f83ff8a82a30d5f71');
-var SK = getQuery('sk', 'fde2d76826f244738e9924c66796b3a8');
+var SK = getQuery('sk', 'sksksk');
 
 // 如果使用临时 AK 和 SK，必须设置 SESSION_TOKEN 和 UPTOKEN_URL 这两个参数
 // **缺一不可**
 var SESSION_TOKEN = null;
-var UPTOKEN_URL = 'http://localhost.baidu.com:7788/ack';
+var UPTOKEN_URL = location.host === 'leeight.github.io'
+    ? 'https://cloud.baidu.com/api/authorization'
+    : 'http://localhost:9888/api/authorization';
+
 
 var VOD_ENDPOINT = getQuery('vod.endpoint', 'http://vod.baidubce.com');
 var VOD_BUCKET = getQuery('vod.bucket', 'bce-bos-uploader');
@@ -214,13 +217,9 @@ var uploader = new baidubce.bos.Uploader({
   bos_multipart_parallel: 5,
   chunk_size: '8mb',
 
-  bos_ak: AK,
-  bos_sk: SK,
-  // uptoken: SESSION_TOKEN,
-
   // IE下面的 PostObject 请求不能用临时 ak 和 sk, 因此
   // 需要通过这个 URL 来动态计算 policy 签名
-  // uptoken_url: UPTOKEN_URL,
+  uptoken_url: UPTOKEN_URL,
 
   max_file_size: '50Gb',
   chunk_size: CHUNK_SIZE,

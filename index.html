@@ -294,13 +294,17 @@
       uploadedInfo[uuid] = options;
     }
 
+    var UPTOKEN_URL = location.host === 'leeight.github.io'
+        ? 'https://cloud.baidu.com/api/authorization'
+        : 'http://localhost:9888/api/authorization';
+
     var uploader = new baidubce.bos.Uploader({
       browse_button: '#file',
       multi_selection: true,
       bos_endpoint: 'http://bce-bos-uploader.cdn.bcebos.com',
       bos_multipart_parallel: 5,
       chunk_size: '8mb',
-      uptoken_url: 'https://cloud.baidu.com/api/authorization',
+      uptoken_url: UPTOKEN_URL,
       max_retries: 2,
       max_file_size: '50Gb',
       flash_swf_url: 'bower_components/moxie/bin/flash/Moxie.swf',

@@ -133,8 +133,9 @@
     </div>
     <script>
     var __isEmpty = true;
-    var AK = '07e08ee9530d400f83ff8a82a30d5f71';
-    var SK = 'fde2d76826f244738e9924c66796b3a8';
+    var UPTOKEN_URL = location.host === 'leeight.github.io'
+        ? 'https://cloud.baidu.com/api/authorization'
+        : 'http://localhost:9888/api/authorization';
     var BOS_ENDPOINT = 'http://bce-bos-uploader.cdn.bcebos.com';
     var Uploader = WebUploader.Uploader;
 
@@ -163,9 +164,17 @@
       return key;
     }
 
-    function generateAuthorization(method, resource, params, headers, timestamp, expirationInSeconds, headersToSign) {
-      var auth = new baidubce.sdk.Auth(AK, SK);
-      return auth.generateAuthorization(method, resource, params, headers, timestamp, expirationInSeconds, headersToSign);
+    function generateAuthorization(method, resource, params, headers) {
+      return $.ajax({
+        url: UPTOKEN_URL,
+        dataType: 'jsonp',
+        data: {
+          httpMethod: method,
+          path: resource,
+          queries: JSON.stringify(params || {}),
+          headers: JSON.stringify(headers || {})
+        }
+      });
     }
 
 
@@ -178,30 +187,30 @@
         var params = {'uploads': ''};
         var xbceDate = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
         var host = BOS_ENDPOINT.replace(/https?:\/\//, '');
-        var timestamp = new Date().getTime() / 1000;
-        var expirationInSeconds = 0;
-        var headersToSign = ['x-bce-date', 'host'];
         var headers_ = {
-            'x-bce-date': xbceDate,
-            'host': host
+          'x-bce-date': xbceDate,
+          'host': host
         };
-        var authorization = generateAuthorization(method, resource, params, headers_, timestamp, expirationInSeconds, headersToSign);
-        var headers = {};
-        headers['authorization'] = authorization;
-        headers['x-bce-date'] = xbceDate;
 
-        var deferred = WebUploader.Deferred();
-        file.startAt = Date.now();
-        $.ajax({
-          url: BOS_ENDPOINT + resource + '?uploads',
-          method: method,
-          headers: headers
-        }).done(function(ret) {
-          file.bos = ret;
-          deferred.resolve(file);
+        return generateAuthorization(method, resource, params, headers_).then(function (response) {
+          if (response.statusCode !== 200) {
+            throw new Error('generateAuthorization failed');
+          }
+
+          var headers = {};
+          headers['authorization'] = response.signature;
+          headers['x-bce-date'] = xbceDate;
+
+          file.startAt = Date.now();
+          return $.ajax({
+            url: BOS_ENDPOINT + resource + '?uploads',
+            method: method,
+            headers: headers
+          }).done(function(ret) {
+            file.bos = ret;
+            return file;
+          });
         });
-
-        return deferred.promise();
       },
 
       'before-send': function(block) {
@@ -210,23 +219,28 @@
         var params = {'partNumber': block.chunk + 1, uploadId: block.file.bos.uploadId};
         var xbceDate = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
         var host = BOS_ENDPOINT.replace(/https?:\/\//, '');
-        var timestamp = new Date().getTime() / 1000;
-        var expirationInSeconds = 0;
-        var headersToSign = ['x-bce-date', 'host'];
         var headers_ = {
-            'x-bce-date': xbceDate,
-            'host': host
+          'x-bce-date': xbceDate,
+          'host': host
         };
-        var authorization = generateAuthorization(method, resource, params, headers_, timestamp, expirationInSeconds, headersToSign);
-        var headers = {};
-        headers['authorization'] = authorization;
-        headers['x-bce-date'] = xbceDate;
 
-        block.options = {
-          method: method,
-          server: BOS_ENDPOINT + resource + '?partNumber=' + params.partNumber + '&uploadId=' + params.uploadId,
-          headers: headers
-        };
+        return generateAuthorization(method, resource, params, headers_).then(function (response) {
+          if (response.statusCode !== 200) {
+            throw new Error('generateAuthorization failed');
+          }
+
+          var headers = {};
+          headers['authorization'] = response.signature;
+          headers['x-bce-date'] = xbceDate;
+
+          block.options = {
+            method: method,
+            server: BOS_ENDPOINT + resource + '?partNumber=' + params.partNumber + '&uploadId=' + params.uploadId,
+            headers: headers
+          };
+
+          return block;
+        });
       },
 
       'after-send-file': function(file) {
@@ -245,25 +259,27 @@
         var params = {'uploadId': file.bos.uploadId};
         var xbceDate = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
         var host = BOS_ENDPOINT.replace(/https?:\/\//, '');
-        var timestamp = new Date().getTime() / 1000;
-        var expirationInSeconds = 0;
-        var headersToSign = ['x-bce-date', 'host'];
         var headers_ = {
-            'x-bce-date': xbceDate,
-            'host': host
+          'x-bce-date': xbceDate,
+          'host': host
         };
-        var authorization = generateAuthorization(method, resource, params, headers_, timestamp, expirationInSeconds, headersToSign);
-        var headers = {};
-        headers['authorization'] = authorization;
-        headers['x-bce-date'] = xbceDate;
+        return generateAuthorization(method, resource, params, headers_).then(function (response) {
+          if (response.statusCode !== 200) {
+            throw new Error('generateAuthorization failed');
+          }
 
-        return $.ajax({
-          url: BOS_ENDPOINT + resource + '?uploadId=' + params.uploadId,
-          method: method,
-          headers: headers,
-          dataType: 'json',
-          data: JSON.stringify({parts: parts}),
-          contentType: 'application/json; charset=utf-8',
+          var headers = {};
+          headers['authorization'] = response.signature;
+          headers['x-bce-date'] = xbceDate;
+
+          return $.ajax({
+            url: BOS_ENDPOINT + resource + '?uploadId=' + params.uploadId,
+            method: method,
+            headers: headers,
+            dataType: 'json',
+            data: JSON.stringify({parts: parts}),
+            contentType: 'application/json; charset=utf-8',
+          });
         });
       }
     });
