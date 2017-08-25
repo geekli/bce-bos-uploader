@@ -1,6 +1,6 @@
 ### Baidu Cloud Engine BOS Uploader (Lite)
 
-bce-bos-uploader-lite 是 [bce-bos-uploader](https://github.com/leeight/bce-bos-uploader) 的精简版，裁剪了不太常用的功能组件，保留了核心的上传功能，当前 1.0.4 版本 `*.min.js` 文件大小在 gzip 前后的情况是 47k / 16k。
+bce-bos-uploader-lite 是 [bce-bos-uploader](https://github.com/leeight/bce-bos-uploader) 的精简版，裁剪了不太常用的功能组件，保留了核心的上传功能，当前 1.0.5 版本 `*.min.js` 文件大小在 gzip 前后的情况是 47k / 16k。
 
 ### 支持的浏览器
 
@@ -9,7 +9,7 @@ IE8+, Firefox, Chrome, Safari, Opera
 ```html
 <!--[if lte IE 9]><script src="https://cdn.rawgit.com/moxiecode/moxie/v1.4.1/bin/js/moxie.min.js"></script><![endif]-->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
-<script src="https://bce.bdstatic.com/bce-bos-uploader-lite/1.0.4/bce-bos-uploader-lite.min.js"></script>
+<script src="https://bce.bdstatic.com/bce-bos-uploader-lite/1.0.5/bce-bos-uploader-lite.min.js"></script>
 ```
 
 ### 如何使用
@@ -164,6 +164,11 @@ var uploader = new baidubce.bos.Uploader({
 |multi_selection|N|false|是否可以选择多个文件|
 |accept|N|-|可以支持选择的文件类型，例如 `mp4,avi,txt` 等等|
 |flash_swf_url|Y|-|mOxie Flash文件的地址。如果要支持IE低版本，必须设置这个参数，而且需要跟所处的页面是同域的|
+
+> 对于 accept 属性，需要注意的是，在 Safari 下面，只能设置 mime-type，设置文件名后缀是没有效果的。所以一般建议这么使用：
+> ...
+> accept: isSafari ? 'video/mp4' : 'mp4'
+> ...
 
 #### 认证相关
 

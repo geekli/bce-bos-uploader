@@ -287,7 +287,7 @@ exports.expandAccept = function (accept) {
 
     // 为了保证兼容性，把 mimeTypes 和 exts 都返回回去
     exts = u.map(exts, function (ext) {
-        return /^\./.test(ext) ? ext : ('.' + ext);
+        return (/^\./.test(ext) || /\//.test(ext)) ? ext : ('.' + ext);
     });
 
     return exts.join(',');

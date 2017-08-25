@@ -562,18 +562,20 @@ Uploader.prototype.setOptions = function (options) {
 /**
  * 有的用户希望主动更新 sts token，避免过期的问题
  *
+ * @param {string=} bucket The bucket name.
  * @return {Promise}
  */
-Uploader.prototype.refreshStsToken = function () {
+Uploader.prototype.refreshStsToken = function (bucket) {
     var self = this;
     var options = self.options;
+    var bos_bucket = bucket || options.bos_bucket;
     var stsMode = true // self._xhr2Supported
-        && options.bos_bucket
+        && bos_bucket
         && options.uptoken_url
         && options.get_new_uptoken === false;
     if (stsMode) {
         var stm = new StsTokenManager(options);
-        return stm.get(options.bos_bucket).then(function (payload) {
+        return stm.get(bos_bucket).then(function (payload) {
             return self.setOptions({
                 bos_ak: payload.AccessKeyId,
                 bos_sk: payload.SecretAccessKey,
