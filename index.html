@@ -79,7 +79,9 @@
         <div class="col-md-12">
           <div class="logo"><h2>文件上传演示</h2></div>
           <div class="alert alert-warning" role="alert">
-            文件自动上传到 bce-bos-uploader 这个bucket，后台会定期清理，请勿上传重要文件。
+            文件自动上传到 bce-bos-uploader 这个bucket，后台会定期清理，请勿上传重要文件。 <br />
+            <strong>uptoken_url</strong> 的后端实现逻辑，请参考：
+            <a href="https://github.com/leeight/bce-sdk-js-usage" target="_blank">https://github.com/leeight/bce-sdk-js-usage</a>
           </div>
           <form class="form-inline">
             <div class="form-group">
@@ -125,12 +127,6 @@
     <script>
     var __uuid = 0;
     var __isEmpty = true;
-    var __isApplication = typeof window.process !== 'undefined' && typeof window.require === 'function';
-
-    if (__isApplication) {
-      $('.alert').hide();
-      $('#forkme').hide();
-    }
 
     function noop() {
     }
@@ -183,20 +179,13 @@
           container.html(time);
         },
         setUrl: function (url) {
-          if (__isApplication) {
-            return;
-          }
           var container = $('#' + rowId + ' .f-name');
           var name = container.html();
           container.html('<a href="' + url + '" target="_blank">' + name + '</a>');
         },
         clearActions: function (uuid, force) {
           var container = $('#' + rowId + ' .f-actions');
-          if (!force && __isApplication) {
-            container.html('<a href="javascript:;" data-cmd="download" data-fid="' + uuid + '">下载</a>');
-          } else {
-            container.html('-');
-          }
+          container.html('-');
         },
         setErrorMessage: function (errorMessage) {
           var errorHtml = '<div class="alert alert-danger" role="alert">' + errorMessage + '</div>';
@@ -215,83 +204,6 @@
              '  <div class="progress-bar progress-bar-success progress-bar-striped" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width: 0%">'
              '  </div>' +
              '</div>';
-    }
-
-    function download(fid) {
-      if (!__isApplication) {
-        return;
-      }
-
-      var fileInfo = uploadedInfo[fid];
-      if (!fileInfo) {
-        return;
-      }
-
-      var fs = require('fs');
-      var path = require('path');
-      var electron = require('electron');
-      var dl = require('./download');
-
-      var dialog = electron.remote.dialog;
-      var app = electron.remote.app;
-
-      var url = fileInfo.url
-      var fileSize = fileInfo.size
-      var fileName = fileInfo.name;
-
-      var dialogOptions = {
-        defaultPath: fileName,
-        title: '保存' + fileName
-      };
-
-      var rv = dialog.showSaveDialog(dialogOptions);
-      if (!rv) {
-        return;
-      }
-
-      var dstDir = path.dirname(rv);
-      fileName = path.basename(fileName);
-
-      if (!fs.existsSync(dstDir)) {
-        require('mkdirp').sync(dstDir);
-      }
-
-      var row = getRowById(fileInfo.rowId);
-      row.setProgress(0);
-      row.setStatus('circle-arrow-down');
-      row.setTime('-');
-
-      dl.download(url, fileSize, dstDir, fileName, function (progressInfo) {
-        var bytes = progressInfo[0];
-        var time = progressInfo[1];
-        var pendings = progressInfo[2];
-
-        var progress = bytes / (bytes + pendings);
-        row.setProgress(progress);
-
-        var speed = bytes / (time / 1000);
-        var html = '下载速度：' + humanize.filesize(speed) + '/s';
-        var seconds = pendings / speed;
-        if (seconds > 1) {
-          var dhms = baidubce.utils.toDHMS(Math.ceil(seconds));
-          html += '，剩余时间：' + [
-            humanize.pad(dhms.HH, 2, '0'),
-            humanize.pad(dhms.MM, 2, '0'),
-            humanize.pad(dhms.SS, 2, '0')
-          ].join(':');
-        }
-        else if (pendings <= 0) {
-          row.clearActions(fileInfo.uuid, true);
-          row.setStatus('ok-circle', true);
-          row.setTime((time / 1000).toFixed(2));
-        }
-        $('.network-speed').html(html);
-      });
-    }
-
-    var uploadedInfo = {};
-    function saveUploadedFile(uuid, options) {
-      uploadedInfo[uuid] = options;
     }
 
     var UPTOKEN_URL = location.host === 'leeight.github.io'
@@ -388,13 +300,6 @@
           row.setUrl(url);
           row.setTime(time);
           row.clearActions(file.uuid);
-          saveUploadedFile(file.uuid, {
-            rowId: file.__id,
-            uuid: file.uuid,
-            url: url,
-            size: file.size,
-            name: file.name
-          });
           localStorage.removeItem(file.__uploadId);
         },
         NetworkSpeed: function (_, bytes, time, pendings) {
