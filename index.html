@@ -140,7 +140,7 @@
     }
 
     function toUrl(object) {
-      var url = 'http://bce-bos-uploader.cdn.bcebos.com/' + encodeURIComponent(object).replace(/%2F/gi, '/');
+      var url = 'https://bce-bos-uploader.cdn.bcebos.com/' + encodeURIComponent(object).replace(/%2F/gi, '/');
       return url;
     }
 
@@ -207,14 +207,15 @@
     }
 
     var UPTOKEN_URL = location.host === 'leeight.github.io'
-        ? 'https://cloud.baidu.com/api/authorization'
-        : 'http://localhost:9888/api/authorization';
+        ? 'https://cloudtest.baidu.com/api/authorization'
+        : 'https://cloudtest.baidu.com/api/authorization';
 
     var uploader = new baidubce.bos.Uploader({
       browse_button: '#file',
       multi_selection: true,
-      bos_endpoint: 'http://bce-bos-uploader.cdn.bcebos.com',
+      bos_endpoint: 'https://bce-bos-uploader.cdn.bcebos.com',
       bos_multipart_parallel: 5,
+      bos_multipart_auto_continue: true,
       chunk_size: '8mb',
       uptoken_url: UPTOKEN_URL,
       max_retries: 2,
