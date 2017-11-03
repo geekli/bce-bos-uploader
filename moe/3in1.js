@@ -11,23 +11,26 @@
  * specific language governing permissions and limitations under the License.
  */
 
-var AK = getQuery('ak', '07e08ee9530d400f83ff8a82a30d5f71');
-var SK = getQuery('sk', 'sksksk');
+/* global humanize, baidubce */
+
+var AK = getQuery('ak', '');
+var SK = getQuery('sk', '');
 
 // 如果使用临时 AK 和 SK，必须设置 SESSION_TOKEN 和 UPTOKEN_URL 这两个参数
 // **缺一不可**
-var SESSION_TOKEN = null;
-var UPTOKEN_URL = location.host === 'leeight.github.io'
-    ? 'https://cloud.baidu.com/api/authorization'
-    : 'http://localhost:9888/api/authorization';
+var SESSION_TOKEN = getQuery('sessionToken', null);
+var UPTOKEN_URL = getQuery('uptoken_url', null);
 
+// location.host === 'leeight.github.io'
+//    ? 'https://cloud.baidu.com/api/authorization'
+//    : 'http://localhost:9888/api/authorization');
 
 var VOD_ENDPOINT = getQuery('vod.endpoint', 'http://vod.baidubce.com');
 var VOD_BUCKET = getQuery('vod.bucket', 'bce-bos-uploader');
 var VOD_EXTS = 'avi,mp4,flv,rm,rmvb,webm'.split(',');
 
 var BOS_ENDPOINT = getQuery('bos.endpoint', 'http://bj.bcebos.com');
-var BOS_BUCKET = 'bce-bos-uploader';
+var BOS_BUCKET = getQuery('bos.bucket', 'bce-bos-uploader');
 
 var DOC_ENDPOINT = getQuery('doc.endpoint', 'http://doc.baidubce.com');
 var DOC_BUCKET = getQuery('doc.bucket', 'bce-bos-uploader');
@@ -221,6 +224,10 @@ var uploader = new baidubce.bos.Uploader({
   // 需要通过这个 URL 来动态计算 policy 签名
   uptoken_url: UPTOKEN_URL,
 
+  bos_ak: UPTOKEN_URL ? null : AK,
+  bos_sk: UPTOKEN_URL ? null : SK,
+  uptoken: UPTOKEN_URL ? null : SESSION_TOKEN,
+
   max_file_size: '50Gb',
   chunk_size: CHUNK_SIZE,
   flash_swf_url: '../bower_components/moxie/bin/flash/Moxie.swf',
@@ -337,6 +344,10 @@ var uploader = new baidubce.bos.Uploader({
 });
 
 $('button[type=submit]').click(function () {
+  if (!((AK && SK) || UPTOKEN_URL)) {
+    alert('请设置必要的参数 AK, SK 或者 Uptoken url');
+    return false;
+  }
   uploader.start();
   return false;
 });
@@ -430,13 +441,10 @@ $('#view-docs-modal').on('shown.bs.modal', function (e) {
   });
 });
 
-
-
-
-
-
-
-
-
-
-/* vim: set ts=4 sw=4 sts=4 tw=120: */
+$('input[name="ak"]').val(AK);
+$('input[name="sk"]').val(SK);
+$('input[name="sessionToken"]').val(SESSION_TOKEN);
+$('input[name="uptoken_url"]').val(UPTOKEN_URL);
+$('input[name="vod.bucket"]').val(VOD_BUCKET);
+$('input[name="bos.bucket"]').val(BOS_BUCKET);
+$('input[name="doc.bucket"]').val(DOC_BUCKET);

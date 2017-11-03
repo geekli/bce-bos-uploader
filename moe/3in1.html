@@ -40,6 +40,25 @@
           <div class="alert alert-success">
             根据文件后缀自动判断应该上传到 BOS，VOD，DOC 这些服务
           </div>
+          <form class="form-inline" action="?">
+            <div class="form-group">
+              必填：
+              <input name="ak" type="text" class="form-control" placeholder="AK" />
+              <input name="sk" type="text" class="form-control" placeholder="SK" />
+              <input type="submit" class="btn btn-success" value="设置参数" />
+            </div>
+            <br />
+            <br />
+            <div class="form-group">
+              可选：
+              <input name="sessionToken" type="text" class="form-control" placeholder="SESSION_TOKEN" />
+              <input name="uptoken_url" type="text" class="form-control" placeholder="Uptoken url" />
+              <input name="vod.bucket" class="form-control" placeholder="vod bucket" />
+              <input name="bos.bucket" class="form-control" placeholder="bos bucket" />
+              <input name="doc.bucket" class="form-control" placeholder="doc bucket" />
+            </div>
+          </form>
+          <br />
           <form class="form-inline" id="form">
             <div class="form-group">
               <span class="btn btn-default btn-file">
