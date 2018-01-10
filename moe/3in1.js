@@ -25,14 +25,14 @@ var UPTOKEN_URL = getQuery('uptoken_url', null);
 //    ? 'https://cloud.baidu.com/api/authorization'
 //    : 'http://localhost:9888/api/authorization');
 
-var VOD_ENDPOINT = getQuery('vod.endpoint', 'http://vod.baidubce.com');
+var VOD_ENDPOINT = getQuery('vod.endpoint', 'https://vod.bj.baidubce.com');
 var VOD_BUCKET = getQuery('vod.bucket', 'bce-bos-uploader');
 var VOD_EXTS = 'avi,mp4,flv,rm,rmvb,webm'.split(',');
 
-var BOS_ENDPOINT = getQuery('bos.endpoint', 'http://bj.bcebos.com');
+var BOS_ENDPOINT = getQuery('bos.endpoint', 'https://bj.bcebos.com');
 var BOS_BUCKET = getQuery('bos.bucket', 'bce-bos-uploader');
 
-var DOC_ENDPOINT = getQuery('doc.endpoint', 'http://doc.baidubce.com');
+var DOC_ENDPOINT = getQuery('doc.endpoint', 'https://doc.bj.baidubce.com');
 var DOC_BUCKET = getQuery('doc.bucket', 'bce-bos-uploader');
 var DOC_EXTS = 'txt,pdf,doc,docx,ppt,pptx,xls,xlsx'.split(',');
 var DOC_MAX_SIZE = baidubce.utils.parseSize('100Mb');   // 文档最大 100Mb
